@@ -276,6 +276,12 @@ button.day.is-done {
   cursor: pointer;
 }
 
+.day sup {
+  font-size: 0.6rem;
+  margin-left: 0.1rem;
+  opacity: 0.85;
+}
+
 button.day.is-selected {
   outline: 2px solid var(--fg);
   outline-offset: 1px;

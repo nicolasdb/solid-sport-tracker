@@ -290,24 +290,32 @@ function renderHistorique(
   for (let i = 0; i < leading; i += 1) cells.push(`<span class="day is-empty"></span>`);
   for (let d = 1; d <= daysInMonth; d += 1) {
     const key = isoDay(new Date(year, monthIndex, d));
-    const done = days.has(key);
+    const count = byDay.get(key)?.length ?? 0;
     cells.push(
-      done
-        ? `<button class="day is-done" data-day="${key}">${d}</button>`
+      count > 0
+        ? `<button class="day is-done" data-day="${key}">${d}${
+            count > 1 ? `<sup>${count}</sup>` : ""
+          }</button>`
         : `<span class="day">${d}</span>`
     );
   }
 
-  const monthCount = [...days].filter((d) => d.startsWith(`${year}-${String(monthIndex + 1).padStart(2, "0")}`)).length;
+  // byDay est indexé par jour : le nombre de séances est la somme des listes,
+  // un jour pouvant en porter plusieurs.
+  const totalSeances = [...byDay.values()].reduce((sum, urls) => sum + urls.length, 0);
+  const monthPrefix = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+  const monthSeances = [...byDay.entries()]
+    .filter(([day]) => day.startsWith(monthPrefix))
+    .reduce((sum, [, urls]) => sum + urls.length, 0);
 
   container.innerHTML = `
     <div class="streak">
       <strong>${streak}</strong> jour${streak > 1 ? "s" : ""} d'affilée
-      <span class="meta">· ${byDay.size} séance${byDay.size > 1 ? "s" : ""} au total</span>
+      <span class="meta">· ${totalSeances} séance${totalSeances > 1 ? "s" : ""} au total</span>
     </div>
     <div class="cal-head">
       <button id="cal-prev" class="ghost">‹</button>
-      <span>${MOIS[monthIndex]} ${year} <span class="meta">· ${monthCount}</span></span>
+      <span>${MOIS[monthIndex]} ${year} <span class="meta">· ${monthSeances}</span></span>
       <button id="cal-next" class="ghost">›</button>
     </div>
     <div class="cal-grid">
@@ -328,35 +336,46 @@ function renderHistorique(
     btn.addEventListener("click", () => {
       container.querySelectorAll("button.day").forEach((b) => b.classList.remove("is-selected"));
       btn.classList.add("is-selected");
-      showSeanceDetail(byDay.get(btn.dataset.day!)![0]);
+      showSeanceDetail(byDay.get(btn.dataset.day!)!);
     });
   });
 }
 
-async function showSeanceDetail(url: string) {
+/** Un jour peut porter plusieurs séances : on les affiche toutes, dans l'ordre. */
+async function showSeanceDetail(urls: string[]) {
   const panel = document.querySelector<HTMLElement>("#seance-detail")!;
   panel.innerHTML = `<p class="lead">Lecture…</p>`;
   try {
-    const seance = await readSeance(url);
-    const date = seance.dateRealisation;
-    panel.innerHTML = `
-      <section class="detail">
-        <h3>${date ? date.toLocaleDateString("fr-FR", { dateStyle: "full" }) : "Séance"}</h3>
-        <p class="meta">Durée réelle : ${formatSeconds(seance.dureeReelleSecondes)}</p>
-        <ul class="detail-blocs">
-          ${seance.blocs
-            .map(
-              (b) => `<li class="${b.complete ? "is-done" : "is-skipped"}">
-                <span>${b.complete ? "✓" : "✗"}</span>
-                <span>${b.titre}</span>
-                <span class="meta">${formatSeconds(b.dureeReelleSecondes)}</span>
-              </li>`
-            )
-            .join("")}
-        </ul>
-        ${seance.ressenti ? `<p class="ressenti">${seance.ressenti}</p>` : ""}
-      </section>
-    `;
+    const seances = await Promise.all(urls.map(readSeance));
+    // Les noms de fichiers ne se trient pas chronologiquement (`<date>.ttl`
+    // passe après `<date>-HHMMSS.ttl`) : on trie sur l'heure réelle.
+    seances.sort((a, b) => (a.dateRealisation?.getTime() ?? 0) - (b.dateRealisation?.getTime() ?? 0));
+
+    panel.innerHTML = seances
+      .map((seance) => {
+        const date = seance.dateRealisation;
+        const titre = date
+          ? date.toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" })
+          : "Séance";
+        return `
+        <section class="detail">
+          <h3>${titre}</h3>
+          <p class="meta">Durée réelle : ${formatSeconds(seance.dureeReelleSecondes)}</p>
+          <ul class="detail-blocs">
+            ${seance.blocs
+              .map(
+                (b) => `<li class="${b.complete ? "is-done" : "is-skipped"}">
+                  <span>${b.complete ? "✓" : "✗"}</span>
+                  <span>${b.titre}</span>
+                  <span class="meta">${formatSeconds(b.dureeReelleSecondes)}</span>
+                </li>`
+              )
+              .join("")}
+          </ul>
+          ${seance.ressenti ? `<p class="ressenti">${seance.ressenti}</p>` : ""}
+        </section>`;
+      })
+      .join("");
   } catch (err) {
     panel.innerHTML = `<p class="error">${describePodError(err)}</p>`;
   }
