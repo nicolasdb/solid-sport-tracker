@@ -6,6 +6,7 @@ import {
   getUrl,
   getUrlAll,
   getInteger,
+  getDatetime,
   getContainedResourceUrlAll,
   getPodUrlAll,
   createContainerAt,
@@ -18,7 +19,16 @@ import {
 } from "@inrupt/solid-client";
 import { RDF } from "@inrupt/vocab-common-rdf";
 import { authFetch as fetch } from "./auth";
-import { st, type Bloc, type Carnet, type Exercice, type Preferences, type SeanceModele } from "../vocab/carnet";
+import {
+  st,
+  type Bloc,
+  type BlocRealise,
+  type Carnet,
+  type Exercice,
+  type Preferences,
+  type SeanceInstance,
+  type SeanceModele,
+} from "../vocab/carnet";
 
 const STORAGE_TYPE = "http://www.w3.org/ns/pim/space#Storage";
 
@@ -423,4 +433,67 @@ export async function logSeance(carnetContainerUrl: string, log: NewSeanceLog): 
 
   await saveSolidDatasetAt(docUrl, dataset, { fetch });
   return docUrl;
+}
+
+/**
+ * URLs des séances loguées, en une seule requête (listing du container).
+ * Container absent = aucune séance encore enregistrée, pas une erreur.
+ */
+export async function listSeanceUrls(carnetContainerUrl: string): Promise<string[]> {
+  const container = seancesContainer(carnetContainerUrl);
+  try {
+    const dataset = await getSolidDataset(container, { fetch });
+    return getContainedResourceUrlAll(dataset).filter((url) => url.endsWith(".ttl"));
+  } catch (err) {
+    if (err instanceof FetchError && err.statusCode === 404) return [];
+    throw err;
+  }
+}
+
+/**
+ * Jour d'une séance déduit de son nom de fichier (`2026-08-29.ttl`), ce qui
+ * évite de télécharger le document. C'est un *indice* : le nom peut être
+ * suffixé de l'heure, et seul `st:dateRealisation` fait foi une fois le
+ * document ouvert.
+ */
+export function seanceDayFromUrl(url: string): string | null {
+  return url.split("/").pop()?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] ?? null;
+}
+
+function blocFragmentIndex(url: string): number {
+  return Number(url.match(/#bloc-(\d+)$/)?.[1] ?? Number.MAX_SAFE_INTEGER);
+}
+
+export async function readSeance(docUrl: string): Promise<SeanceInstance> {
+  const dataset = await getSolidDataset(docUrl, { fetch });
+  const root = getThing(dataset, `${docUrl}#it`);
+  if (!root) {
+    throw new Error(`Séance introuvable: ${docUrl}`);
+  }
+
+  const blocs: BlocRealise[] = getUrlAll(root, st.blocRealise)
+    .map((url) => {
+      const thing = getThing(dataset, url);
+      if (!thing) return null;
+      return {
+        url,
+        baseSurBlocUrl: getUrl(thing, st.baseSurBloc) ?? undefined,
+        titre: getStringNoLocale(thing, st.titre) ?? "(sans titre)",
+        complete: getInteger(thing, st.complete) === 1,
+        dureeReelleSecondes: getInteger(thing, st.dureeReelleSecondes) ?? 0,
+      };
+    })
+    .filter((b): b is NonNullable<typeof b> => b !== null)
+    // L'ordre des objets d'un prédicat n'est pas garanti : on retrouve celui
+    // de la séance via l'index encodé dans le fragment (#bloc-0, #bloc-1…).
+    .sort((a, b) => blocFragmentIndex(a.url) - blocFragmentIndex(b.url));
+
+  return {
+    url: docUrl,
+    modeleUrl: getUrl(root, st.baseSurModele) ?? undefined,
+    dateRealisation: getDatetime(root, st.dateRealisation) ?? undefined,
+    dureeReelleSecondes: getInteger(root, st.dureeReelleSecondes) ?? 0,
+    ressenti: getStringNoLocale(root, st.ressenti) ?? undefined,
+    blocs,
+  };
 }

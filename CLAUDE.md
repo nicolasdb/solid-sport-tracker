@@ -106,6 +106,28 @@ including the existence probes in `ensureContainer`/`exists` — so a raw 401
 says nothing about the resource. Route those through `isAuthError` and report
 an expired session rather than surfacing the server's error graph.
 
+### History read-back
+
+CSS has **no SPARQL SELECT endpoint** — it supports SPARQL/N3 PATCH for updating
+a single resource, but nothing queries across resources. So aggregates are the
+client's job, and reads are tiered by cost:
+
+1. **Container listing** (1 request) — `listSeanceUrls` plus `seanceDayFromUrl`
+   yields every trained day from the *filenames*, with no document fetches. The
+   calendar and streak are built entirely from this.
+2. **One document** (on demand) — `readSeance`, only when a day is tapped.
+3. **A window of documents** — needed for per-block adherence stats. Not built;
+   the plan is a client-side fold over the most recent ~30 séances rather than
+   mirroring into Oxigraph, to keep the pod the only dependency.
+
+Filenames are a *hint*, not truth: they can carry an `-HHMMSS` collision suffix
+and encode a local date. `st:dateRealisation` is authoritative once a document
+is open. A day can hold several séances, hence `Map<day, url[]>`.
+
+`wireTabs` toggles `hidden` on two coexisting views rather than re-rendering.
+Re-rendering would destroy a running timer and its listeners — do not "simplify"
+this into a render-per-tab.
+
 ### Mobile layout constraints
 
 The session view is built mobile-first and there are a few things not to undo:

@@ -70,8 +70,14 @@ Dans les deux cas aucun provider n'est codé en dur côté app.
 - ✅ Brouillon local du récapitulatif (`localStorage`, 24 h) : une séance
   saisie mais non écrite survit à un échec réseau, une session expirée ou
   une fermeture d'onglet, et un bandeau « Reprendre » la repropose.
-- ⏳ Relecture de l'historique des séances — l'app écrit les logs mais ne
-  les réaffiche pas encore.
+- ✅ Relecture de l'historique : onglet « Historique » avec série de jours
+  d'affilée et calendrier mensuel des séances, un jour cliquable ouvrant le
+  détail (blocs faits/passés, durée, ressenti). Lecture en paliers — le
+  calendrier ne coûte qu'un listing de container, le détail n'est chargé
+  qu'à la demande.
+- ⏳ Statistiques d'assiduité par bloc (« je saute la mobilité 40 % du
+  temps ») — nécessite d'agréger plusieurs séances, prévu côté client sur
+  une fenêtre glissante.
 - ⏳ UI vraiment "dynamique selon les préférences" — aujourd'hui l'app
   affiche juste le premier carnet trouvé; le choix du carnet actif via
   `st:carnetActif` (préférences) reste à brancher.

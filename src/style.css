@@ -195,6 +195,132 @@ li.bloc.is-current {
   font-size: 0.85rem;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex: none;
+  padding-bottom: 0.5rem;
+}
+
+button.tab {
+  flex: 1;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+button.tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.streak {
+  padding: 0.75rem 0;
+  font-size: 1.05rem;
+}
+
+.streak strong {
+  font-size: 1.6rem;
+  color: var(--accent);
+}
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.cal-head button {
+  flex: none;
+  padding: 0.25rem 0.7rem;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+  text-align: center;
+}
+
+.cal-grid .dow {
+  font-size: 0.75rem;
+  color: var(--muted);
+  padding-bottom: 0.25rem;
+}
+
+.day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Cases carrées quelle que soit la largeur de l'écran. */
+  aspect-ratio: 1;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0;
+}
+
+.day.is-empty {
+  visibility: hidden;
+}
+
+button.day.is-done {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  cursor: pointer;
+}
+
+button.day.is-selected {
+  outline: 2px solid var(--fg);
+  outline-offset: 1px;
+}
+
+.detail {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.detail h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+ul.detail-blocs {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0;
+}
+
+ul.detail-blocs li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+}
+
+ul.detail-blocs li span:nth-child(2) {
+  flex: 1;
+}
+
+ul.detail-blocs li.is-skipped {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.ressenti {
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+  font-style: italic;
+}
+
 .banner {
   display: flex;
   align-items: center;

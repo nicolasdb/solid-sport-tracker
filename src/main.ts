@@ -8,9 +8,12 @@ import {
   getPrimaryPodUrl,
   isAuthError,
   listCarnetUrls,
+  listSeanceUrls,
   logSeance,
   readCarnet,
+  readSeance,
   readSeanceModele,
+  seanceDayFromUrl,
 } from "./lib/pod";
 import { echauffementSemaine1 } from "./lib/example-programme";
 import {
@@ -145,7 +148,11 @@ async function renderApp(webId: string) {
         <span class="webid">${webId}</span>
         <button id="logout" class="ghost">Déconnexion</button>
       </header>
-      <div class="session-scroll">
+      <nav class="tabs">
+        <button id="tab-seance" class="tab is-active">Séance</button>
+        <button id="tab-historique" class="tab">Historique</button>
+      </nav>
+      <div class="session-scroll" id="view-seance">
         ${
           hasDraft
             ? `<p class="banner">Séance non enregistrée en attente.
@@ -161,9 +168,12 @@ async function renderApp(webId: string) {
             : `<p>Ce carnet n'a pas encore de modèle de séance chronométrable.</p>`
         }
       </div>
+      <div class="session-scroll" id="view-historique" hidden></div>
       ${blocs.length ? renderTimerBar(blocs[0].dureeSecondes) : ""}
     </main>
   `;
+
+  wireTabs(ctx);
 
   document.querySelector<HTMLButtonElement>("#logout")!.addEventListener("click", async () => {
     await logout();
@@ -179,6 +189,176 @@ async function renderApp(webId: string) {
 
   if (blocs.length) {
     wireTimer(blocs, ctx);
+  }
+}
+
+/**
+ * Les deux vues coexistent dans le DOM et on bascule leur visibilité : les
+ * re-rendre détruirait le minuteur en cours et ses écouteurs.
+ */
+function wireTabs(ctx: SeanceContext) {
+  const tabSeance = document.querySelector<HTMLButtonElement>("#tab-seance")!;
+  const tabHistorique = document.querySelector<HTMLButtonElement>("#tab-historique")!;
+  const viewSeance = document.querySelector<HTMLElement>("#view-seance")!;
+  const viewHistorique = document.querySelector<HTMLElement>("#view-historique")!;
+  const timerBar = document.querySelector<HTMLElement>("#timer");
+
+  let historiqueLoaded = false;
+
+  const show = (historique: boolean) => {
+    viewSeance.hidden = historique;
+    viewHistorique.hidden = !historique;
+    if (timerBar) timerBar.hidden = historique;
+    tabSeance.classList.toggle("is-active", !historique);
+    tabHistorique.classList.toggle("is-active", historique);
+    if (historique && !historiqueLoaded) {
+      historiqueLoaded = true;
+      loadHistorique(viewHistorique, ctx);
+    }
+  };
+
+  tabSeance.addEventListener("click", () => show(false));
+  tabHistorique.addEventListener("click", () => show(true));
+}
+
+/** `2026-08-29` en heure locale — clé de comparaison des jours. */
+function isoDay(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/**
+ * Série de jours consécutifs jusqu'à aujourd'hui. Une journée encore en cours
+ * ne casse pas la série : on repart d'hier si rien n'est enregistré aujourd'hui.
+ */
+function currentStreak(days: Set<string>): number {
+  const cursor = new Date();
+  if (!days.has(isoDay(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (days.has(isoDay(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+async function loadHistorique(container: HTMLElement, ctx: SeanceContext) {
+  container.innerHTML = `<p class="lead">Lecture de l'historique…</p>`;
+  try {
+    const urls = await listSeanceUrls(ctx.carnetContainerUrl);
+    if (urls.length === 0) {
+      container.innerHTML = `<p class="lead">Aucune séance enregistrée pour l'instant.</p>`;
+      return;
+    }
+
+    // Un jour peut porter plusieurs séances (fichiers suffixés de l'heure).
+    const byDay = new Map<string, string[]>();
+    for (const url of urls) {
+      const day = seanceDayFromUrl(url);
+      if (!day) continue;
+      byDay.set(day, [...(byDay.get(day) ?? []), url]);
+    }
+
+    renderHistorique(container, ctx, byDay, new Date());
+  } catch (err) {
+    container.innerHTML = `<p class="error">${describePodError(err)}</p>`;
+  }
+}
+
+const MOIS = [
+  "janvier", "février", "mars", "avril", "mai", "juin",
+  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+];
+
+function renderHistorique(
+  container: HTMLElement,
+  ctx: SeanceContext,
+  byDay: Map<string, string[]>,
+  month: Date
+) {
+  const days = new Set(byDay.keys());
+  const streak = currentStreak(days);
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+
+  const first = new Date(year, monthIndex, 1);
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  // getDay() met dimanche à 0 ; on décale pour une semaine commençant lundi.
+  const leading = (first.getDay() + 6) % 7;
+
+  const cells: string[] = [];
+  for (let i = 0; i < leading; i += 1) cells.push(`<span class="day is-empty"></span>`);
+  for (let d = 1; d <= daysInMonth; d += 1) {
+    const key = isoDay(new Date(year, monthIndex, d));
+    const done = days.has(key);
+    cells.push(
+      done
+        ? `<button class="day is-done" data-day="${key}">${d}</button>`
+        : `<span class="day">${d}</span>`
+    );
+  }
+
+  const monthCount = [...days].filter((d) => d.startsWith(`${year}-${String(monthIndex + 1).padStart(2, "0")}`)).length;
+
+  container.innerHTML = `
+    <div class="streak">
+      <strong>${streak}</strong> jour${streak > 1 ? "s" : ""} d'affilée
+      <span class="meta">· ${byDay.size} séance${byDay.size > 1 ? "s" : ""} au total</span>
+    </div>
+    <div class="cal-head">
+      <button id="cal-prev" class="ghost">‹</button>
+      <span>${MOIS[monthIndex]} ${year} <span class="meta">· ${monthCount}</span></span>
+      <button id="cal-next" class="ghost">›</button>
+    </div>
+    <div class="cal-grid">
+      ${["L", "M", "M", "J", "V", "S", "D"].map((d) => `<span class="dow">${d}</span>`).join("")}
+      ${cells.join("")}
+    </div>
+    <div id="seance-detail"></div>
+  `;
+
+  document.querySelector<HTMLButtonElement>("#cal-prev")!.addEventListener("click", () => {
+    renderHistorique(container, ctx, byDay, new Date(year, monthIndex - 1, 1));
+  });
+  document.querySelector<HTMLButtonElement>("#cal-next")!.addEventListener("click", () => {
+    renderHistorique(container, ctx, byDay, new Date(year, monthIndex + 1, 1));
+  });
+
+  container.querySelectorAll<HTMLButtonElement>("button.day").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      container.querySelectorAll("button.day").forEach((b) => b.classList.remove("is-selected"));
+      btn.classList.add("is-selected");
+      showSeanceDetail(byDay.get(btn.dataset.day!)![0]);
+    });
+  });
+}
+
+async function showSeanceDetail(url: string) {
+  const panel = document.querySelector<HTMLElement>("#seance-detail")!;
+  panel.innerHTML = `<p class="lead">Lecture…</p>`;
+  try {
+    const seance = await readSeance(url);
+    const date = seance.dateRealisation;
+    panel.innerHTML = `
+      <section class="detail">
+        <h3>${date ? date.toLocaleDateString("fr-FR", { dateStyle: "full" }) : "Séance"}</h3>
+        <p class="meta">Durée réelle : ${formatSeconds(seance.dureeReelleSecondes)}</p>
+        <ul class="detail-blocs">
+          ${seance.blocs
+            .map(
+              (b) => `<li class="${b.complete ? "is-done" : "is-skipped"}">
+                <span>${b.complete ? "✓" : "✗"}</span>
+                <span>${b.titre}</span>
+                <span class="meta">${formatSeconds(b.dureeReelleSecondes)}</span>
+              </li>`
+            )
+            .join("")}
+        </ul>
+        ${seance.ressenti ? `<p class="ressenti">${seance.ressenti}</p>` : ""}
+      </section>
+    `;
+  } catch (err) {
+    panel.innerHTML = `<p class="error">${describePodError(err)}</p>`;
   }
 }
 

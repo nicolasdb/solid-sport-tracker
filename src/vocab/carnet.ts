@@ -73,6 +73,24 @@ export interface Carnet {
   seanceModeleUrl?: string;
 }
 
+export interface BlocRealise {
+  url: string;
+  /** Bloc du modèle dont ceci est l'occurrence — absent si le modèle a changé. */
+  baseSurBlocUrl?: string;
+  titre: string;
+  complete: boolean;
+  dureeReelleSecondes: number;
+}
+
+export interface SeanceInstance {
+  url: string;
+  modeleUrl?: string;
+  dateRealisation?: Date;
+  dureeReelleSecondes: number;
+  ressenti?: string;
+  blocs: BlocRealise[];
+}
+
 export interface Preferences {
   carnetActifUrl?: string;
   tenueParDefaut?: string;
