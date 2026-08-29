@@ -28,6 +28,28 @@ exec -w "$PWD" ...`) — otherwise `npm run <script>` fails with "Missing script
 because it resolves `package.json` from the container's root instead of the
 mounted repo path.
 
+## Deployment
+
+`make` (no target) prints the help, generated from `## ` comments on target
+lines — keep new targets self-documenting that way.
+
+Static SPA, built locally; only `dist/`, `docker-compose.yml` and `deploy/` are
+rsynced to the VPS (`make vps-deploy`). Nothing compiles on the server, so there
+is no node toolchain to maintain there.
+
+`sportr.nicolasdb.eu` → container `sportr-web` (nginx alpine, `gateway` network)
+→ behind `nginx-gateway`, which terminates TLS. This deliberately does **not**
+serve files from the gateway itself: that would mean editing the shared
+`hetzner-gateway` compose and restarting the proxy in front of every other
+service. Proxying to a container is the pattern every other `conf.d` file uses.
+
+The gateway vhost is versioned here as `deploy/gateway-12-sportr.conf` but must
+be installed into `hetzner-gateway/nginx/conf.d/12-sportr.conf` and deployed
+from that repo — it stays the source of truth for routing.
+
+`dist/` is a bind mount, so a new build is served without restarting the
+container; `vps-restart` is only needed after changing `deploy/nginx-site.conf`.
+
 ## Architecture
 
 Single-page app, no framework — `src/main.ts` drives everything by directly

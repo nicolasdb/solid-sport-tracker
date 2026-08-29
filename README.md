@@ -23,6 +23,26 @@ rend le WebID après redirection. Donner un WebID fait lire son profil pour
 y trouver `solid:oidcIssuer`, utile quand on ne connaît pas le fournisseur.
 Dans les deux cas aucun provider n'est codé en dur côté app.
 
+## Déploiement
+
+`make` seul liste les cibles. L'app est un SPA statique : le build est produit
+localement, seul `dist/` part sur le VPS — rien n'y est compilé.
+
+```bash
+make vps-diff     # montre ce qu'un push changerait, sans rien écrire
+make vps-deploy   # build + rsync + docker compose up -d
+```
+
+`sportr.nicolasdb.eu` est servi par le conteneur `sportr-web`
+(`docker-compose.yml`, nginx alpine sur le réseau `gateway`), derrière
+`nginx-gateway` qui assure TLS et routage. Le vhost à installer dans
+[`hetzner-gateway`](https://github.com/nicolasdb/hetzner-gateway) est versionné
+ici : `deploy/gateway-12-sportr.conf` — à copier en `nginx/conf.d/12-sportr.conf`
+puis déployer depuis ce dépôt-là, qui reste la source de vérité du routage.
+
+`dist/` est monté en volume : un simple `make vps-push` suffit à publier un
+nouveau build, sans redémarrer le conteneur.
+
 ## Architecture
 
 - `src/lib/auth.ts` — résolution du fournisseur OIDC (URL de fournisseur

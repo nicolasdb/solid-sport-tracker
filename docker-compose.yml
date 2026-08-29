@@ -1,0 +1,33 @@
+# Sert le build statique (dist/) derrière nginx-gateway, qui assure TLS et
+# routage pour sportr.nicolasdb.eu. Volontairement indépendant de la stack
+# pocpod0 : l'app est un projet à part, seul le pod lui est commun.
+services:
+  sportr-web:
+    image: nginx:alpine
+    container_name: sportr-web
+    restart: unless-stopped
+
+    networks:
+      - gateway
+
+    volumes:
+      # Build produit localement puis rsyncé — rien n'est compilé sur le VPS.
+      - ./dist:/usr/share/nginx/html:ro
+      - ./deploy/nginx-site.conf:/etc/nginx/conf.d/default.conf:ro
+
+    labels:
+      app.name: "sportr-web"
+      app.description: "Solid Sport Tracker — SPA statique"
+      app.domain: "sportr.nicolasdb.eu"
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/index.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+networks:
+  # Réseau partagé avec nginx-gateway, créé par lui.
+  gateway:
+    external: true
