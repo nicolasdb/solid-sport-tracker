@@ -1,0 +1,120 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  --fg: #1a1a1a;
+  --bg: #ffffff;
+  --muted: #666;
+  --accent: #2f6f4f;
+  --border: #ddd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #f0f0f0;
+    --bg: #14161a;
+    --muted: #9aa0a6;
+    --border: #333;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.screen {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.lead {
+  color: var(--muted);
+}
+
+.meta {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.error {
+  color: #c0392b;
+}
+
+form#login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 480px;
+}
+
+input[type="url"] {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+ol.blocs {
+  padding-left: 1.2rem;
+}
+
+ol.blocs li {
+  margin-bottom: 0.5rem;
+}
+
+.timer {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.timer-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+#timer-label {
+  font-size: 1rem;
+  color: var(--muted);
+}
+
+#timer-remaining {
+  font-size: 3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-controls {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
