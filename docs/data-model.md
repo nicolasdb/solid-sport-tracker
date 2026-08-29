@@ -35,7 +35,12 @@ Un carnet = un container. Ça permet de poser un `.acl` par carnet plus tard
   exercice chronométré comme un équilibre), `st:note` (variante/astuce).
 - `st:SeanceInstance` — log d'une séance réalisée. `st:baseSurModele` (→
   `st:SeanceModele`), `st:dateRealisation`, `st:dureeReelleSecondes`,
-  `st:ressenti` (texte libre — fatigue, gêne, etc.).
+  `st:ressenti` (texte libre — fatigue, gêne, etc.), `st:blocRealise` (→
+  `st:BlocRealise`, plusieurs valeurs).
+- `st:BlocRealise` — ce qu'un bloc est devenu lors d'une séance donnée.
+  `st:baseSurBloc` (→ `st:Bloc` du modèle), `st:titre` (recopié pour que le
+  log reste lisible si le modèle change ensuite), `st:complete` (0/1),
+  `st:dureeReelleSecondes`.
 - `st:Preferences` — pilote l'UI. `st:carnetActif` (→ `st:Carnet`),
   `st:tenueParDefaut` (ex: "Feiyue", "pieds nus"), `st:afficherTimer`
   (booléen encodé en entier 0/1 — voir note ci-dessous).
@@ -103,8 +108,24 @@ Un carnet = un container. Ça permet de poser un `.acl` par carnet plus tard
   st:baseSurModele <../modele.ttl#seance> ;
   st:dateRealisation "2026-08-29T07:30:00Z"^^xsd:dateTime ;
   st:dureeReelleSecondes 1080 ;
-  st:ressenti "Légère gêne au mollet droit, intensité réduite sur les squats" .
+  st:ressenti "Légère gêne au mollet droit, intensité réduite sur les squats" ;
+  st:blocRealise <#bloc-0>, <#bloc-1> .
+
+<#bloc-0> a st:BlocRealise ;
+  st:baseSurBloc <../modele.ttl#bloc-0> ;
+  st:titre "Activation cardiovasculaire" ;
+  st:complete 1 ;
+  st:dureeReelleSecondes 305 .
+
+<#bloc-1> a st:BlocRealise ;
+  st:baseSurBloc <../modele.ttl#bloc-1> ;
+  st:titre "Mobilité articulaire" ;
+  st:complete 0 ;
+  st:dureeReelleSecondes 120 .
 ```
+
+Un log par jour : `<date>.ttl`, suffixé de l'heure (`<date>-HHMMSS.ttl`) si
+la journée porte déjà une séance.
 
 ## Notes d'implémentation
 

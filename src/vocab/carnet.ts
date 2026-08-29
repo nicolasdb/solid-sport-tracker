@@ -11,6 +11,7 @@ export const st = {
   Bloc: `${ST}Bloc`,
   Exercice: `${ST}Exercice`,
   SeanceInstance: `${ST}SeanceInstance`,
+  BlocRealise: `${ST}BlocRealise`,
   Preferences: `${ST}Preferences`,
 
   titre: `${ST}titre`,
@@ -33,6 +34,10 @@ export const st = {
   dureeReelleSecondes: `${ST}dureeReelleSecondes`,
   ressenti: `${ST}ressenti`,
 
+  blocRealise: `${ST}blocRealise`,
+  baseSurBloc: `${ST}baseSurBloc`,
+  complete: `${ST}complete`,
+
   carnetActif: `${ST}carnetActif`,
   tenueParDefaut: `${ST}tenueParDefaut`,
   afficherTimer: `${ST}afficherTimer`,
@@ -46,6 +51,8 @@ export interface Exercice {
 }
 
 export interface Bloc {
+  /** Absent lors de la construction d'un carnet — l'URL n'existe qu'une fois écrit. */
+  url?: string;
   titre: string;
   ordre: number;
   dureeSecondes: number;

@@ -21,12 +21,44 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
+  /* Évite le rebond de scroll qui fait apparaître/disparaître les barres du
+     navigateur pendant une séance. */
+  overscroll-behavior-y: none;
 }
 
 .screen {
   max-width: 640px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  /* Marges de sécurité : encoche en haut, barre gestuelle en bas. */
+  padding: calc(2rem + env(safe-area-inset-top)) 1rem
+    calc(2rem + env(safe-area-inset-bottom));
+}
+
+/*
+ * Vue séance : colonne pleine hauteur, programme défilant au milieu, minuteur
+ * ancré en bas. `dvh` suit la hauteur réellement visible quand les barres du
+ * navigateur se rétractent — `vh` laisserait les boutons sous la barre.
+ */
+.session {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: env(safe-area-inset-top) 1rem 0;
+  box-sizing: border-box;
+}
+
+.session-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.session h1 {
+  font-size: 1.4rem;
+  margin: 0.5rem 0;
 }
 
 .lead {
@@ -71,36 +103,69 @@ button:disabled {
   cursor: default;
 }
 
+button.ghost {
+  background: transparent;
+  color: var(--fg);
+  border-color: var(--border);
+}
+
 .topbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
   font-size: 0.85rem;
   color: var(--muted);
 }
 
-ol.blocs {
-  padding-left: 1.2rem;
+.topbar .webid {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-ol.blocs li {
-  margin-bottom: 0.5rem;
+.topbar button {
+  flex: none;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+ol.blocs {
+  padding-left: 1.2rem;
+  margin: 0 0 1rem;
+}
+
+li.bloc {
+  margin-bottom: 0.75rem;
+}
+
+li.bloc.is-past {
+  opacity: 0.4;
+}
+
+li.bloc.is-current {
+  opacity: 1;
+  font-weight: 600;
 }
 
 .timer {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  flex: none;
+  padding: 1rem 0 calc(1rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--bg);
   text-align: center;
+}
+
+.timer.is-awaiting #timer-remaining {
+  opacity: 0.5;
 }
 
 .timer-display {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 #timer-label {
@@ -110,6 +175,7 @@ ol.blocs li {
 
 #timer-remaining {
   font-size: 3rem;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
@@ -117,4 +183,93 @@ ol.blocs li {
   display: flex;
   gap: 0.5rem;
   justify-content: center;
+}
+
+.timer-controls.secondary {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.timer-controls.secondary button {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.banner button {
+  flex: none;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+#recap-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.recap-blocs {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.recap-bloc {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* Ligne entière cliquable : plus tolérant au doigt qu'une case seule. */
+  padding: 0.6rem 0.25rem;
+  cursor: pointer;
+}
+
+.recap-bloc span:first-of-type {
+  flex: 1;
+}
+
+.recap-bloc input {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+}
+
+#recap-form textarea,
+#recap-form input[type="number"] {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+/* Cibles tactiles confortables et programme réduit à l'essentiel sur mobile. */
+@media (max-width: 540px) {
+  .timer-controls button {
+    flex: 1;
+    padding: 0.9rem 0.5rem;
+    font-size: 1rem;
+  }
+
+  #timer-toggle {
+    flex: 2;
+  }
+
+  li.bloc.is-past,
+  li.bloc.is-far {
+    display: none;
+  }
 }

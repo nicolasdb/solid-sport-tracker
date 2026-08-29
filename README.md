@@ -16,17 +16,22 @@ npm install
 npm run dev
 ```
 
-Au chargement, l'app propose un champ WebID (préremplit
-`https://pod.nicolasdb.eu/nicolas/card#me`). La connexion lit le profil
-WebID pour trouver `solid:oidcIssuer`, puis redirige vers ce fournisseur —
-aucun provider n'est codé en dur côté app.
+Au chargement, l'app propose un champ acceptant indifféremment l'adresse
+d'un pod ou un WebID. Donner directement le fournisseur (ex:
+`https://pod.nicolasdb.eu/`) évite la lecture du profil — c'est lui qui
+rend le WebID après redirection. Donner un WebID fait lire son profil pour
+y trouver `solid:oidcIssuer`, utile quand on ne connaît pas le fournisseur.
+Dans les deux cas aucun provider n'est codé en dur côté app.
 
 ## Architecture
 
-- `src/lib/auth.ts` — découverte du fournisseur OIDC depuis le WebID +
-  wrapper autour de `@inrupt/solid-client-authn-browser`.
+- `src/lib/auth.ts` — résolution du fournisseur OIDC (URL de fournisseur
+  donnée telle quelle, ou découverte via `solid:oidcIssuer` dans le profil
+  WebID) + wrapper autour de `@inrupt/solid-client-authn-browser`.
 - `src/lib/pod.ts` — lecture des ressources du pod (carnets, modèle de
-  séance, préférences) via `@inrupt/solid-client`.
+  séance, préférences) via `@inrupt/solid-client`. La racine du pod est
+  trouvée via `pim:storage`, avec repli sur la remontée par en-têtes
+  `Link: <pim:Storage>; rel="type"` (voir ci-dessous).
 - `src/lib/timer.ts` — minuteur séquentiel, enchaîne les blocs d'une séance
   (`SequenceTimer`), indépendant du reste pour rester testable seul.
 - `src/vocab/carnet.ts` — prédicats du vocabulaire `st:` + types TS
@@ -43,15 +48,30 @@ aucun provider n'est codé en dur côté app.
 - ✅ Lecture du premier carnet trouvé sous `/sport-tracker/carnets/` et de
   son modèle de séance.
 - ✅ Timer séquentiel sur les blocs de la séance (démarrer/pause/passer/
-  réinitialiser).
+  réinitialiser). En fin de bloc il n'enchaîne pas tout seul : il arme le
+  bloc suivant et attend le feu vert, pour laisser souffler.
+- ✅ UI pensée mobile : colonne pleine hauteur en `dvh`, minuteur ancré en
+  bas avec marges `env(safe-area-inset-*)` pour ne pas passer sous les
+  barres du navigateur, et programme réduit au bloc courant + 2 suivants
+  sur petit écran.
 - ✅ Écriture sur le pod : `ensureTrackerScaffold` crée `/sport-tracker/`,
   `/sport-tracker/carnets/` et `preferences.ttl` s'ils n'existent pas encore
   (appelé automatiquement au login) ; `createCarnet` écrit un carnet complet
   (container + `carnet.ttl` + `modele.ttl`). Rien n'écrit d'ACL — les
   ressources créées héritent du contrôle d'accès du container parent le plus
   proche, privé par défaut sur un pod perso.
-- ⏳ Logger une séance réalisée (`st:SeanceInstance`) — pas encore
-  implémenté, seule la création du carnet/modèle est branchée.
+- ✅ Logger une séance réalisée (`st:SeanceInstance` + `st:BlocRealise`).
+  Le minuteur relève passivement ce qui s'est passé (heure de départ, durée
+  réelle par bloc, blocs passés) ; en fin de séance — ou via « Terminer » —
+  un récapitulatif pré-rempli laisse corriger les blocs faits, ajuster la
+  durée et saisir un ressenti, puis écrit `seances/<date>.ttl` en un seul
+  write. Sans minuteur lancé, le récapitulatif part du programme prévu :
+  c'est le chemin pour loguer une séance faite sans l'app.
+- ✅ Brouillon local du récapitulatif (`localStorage`, 24 h) : une séance
+  saisie mais non écrite survit à un échec réseau, une session expirée ou
+  une fermeture d'onglet, et un bandeau « Reprendre » la repropose.
+- ⏳ Relecture de l'historique des séances — l'app écrit les logs mais ne
+  les réaffiche pas encore.
 - ⏳ UI vraiment "dynamique selon les préférences" — aujourd'hui l'app
   affiche juste le premier carnet trouvé; le choix du carnet actif via
   `st:carnetActif` (préférences) reste à brancher.
@@ -63,8 +83,20 @@ aucun provider n'est codé en dur côté app.
 
 ## Prérequis sur le pod
 
-Le WebID doit déclarer un `pim:storage` (racine du pod) et un
-`solid:oidcIssuer`, ce qui est standard sur Community Solid Server / NSS.
+Le WebID doit déclarer un `solid:oidcIssuer` (standard sur Community Solid
+Server / NSS), sauf si on se connecte en donnant directement l'adresse du
+fournisseur.
+
+Pour trouver la racine du pod, l'app lit d'abord `pim:storage` dans le
+profil WebID. Si le triple est absent — cas des pods créés par un serveur
+antérieur à son écriture automatique — elle remonte la hiérarchie d'URI en
+`HEAD` jusqu'au premier ancêtre annonçant
+`Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"`, ce que le
+protocole Solid impose à tout serveur. On s'arrête au **premier** ancêtre :
+un CSS multi-pods annonce aussi sa racine serveur, qui n'est pas le pod de
+l'usager. Aucune saisie manuelle n'est donc nécessaire sur un serveur
+conforme.
+
 Rien d'autre n'est requis à l'avance : au premier login, l'app crée
 `/sport-tracker/`, `/sport-tracker/carnets/` et `preferences.ttl` s'ils
 n'existent pas, et propose de créer le carnet d'exemple si aucun carnet

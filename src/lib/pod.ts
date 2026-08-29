@@ -20,13 +20,70 @@ import { RDF } from "@inrupt/vocab-common-rdf";
 import { authFetch as fetch } from "./auth";
 import { st, type Bloc, type Carnet, type Exercice, type Preferences, type SeanceModele } from "../vocab/carnet";
 
-/** Racine du pod déclarée dans le profil WebID (pim:storage). */
-export async function getPrimaryPodUrl(webId: string): Promise<string> {
-  const pods = await getPodUrlAll(webId, { fetch });
-  if (pods.length === 0) {
-    throw new Error("Aucun pod (pim:storage) déclaré dans ce profil WebID.");
+const STORAGE_TYPE = "http://www.w3.org/ns/pim/space#Storage";
+
+/** Vrai si l'en-tête Link annonce `rel="type"` vers pim:Storage. */
+function advertisesStorageType(linkHeader: string | null): boolean {
+  if (!linkHeader) return false;
+  const entries = linkHeader.match(/<[^>]*>[^,]*/g) ?? [];
+  return entries.some((entry) => {
+    const target = entry.match(/^<([^>]*)>/)?.[1];
+    return target === STORAGE_TYPE && /rel\s*=\s*"?type"?/i.test(entry);
+  });
+}
+
+/**
+ * Découverte de la racine du pod par remontée de la hiérarchie d'URI, comme
+ * décrit par le protocole Solid : le serveur DOIT annoncer la racine avec un
+ * en-tête `Link: <pim:Storage>; rel="type"`. Le premier ancêtre qui l'annonce
+ * est la racine — il ne faut pas continuer plus haut, un CSS multi-pods
+ * annonce aussi sa propre racine serveur, qui n'est pas le pod de l'usager.
+ */
+async function findStorageByLinkHeaders(startUrl: string): Promise<string | null> {
+  const start = new URL(startUrl);
+  start.hash = "";
+  start.search = "";
+
+  const candidates = [start.toString()];
+  let path = start.pathname;
+  while (path !== "/") {
+    path = path.replace(/[^/]*\/?$/, "");
+    candidates.push(new URL(path, start.origin).toString());
   }
-  return pods[0];
+
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, { method: "HEAD" });
+      if (res.ok && advertisesStorageType(res.headers.get("link"))) return url;
+    } catch {
+      // Ancêtre inaccessible : on continue de remonter.
+    }
+  }
+  return null;
+}
+
+/**
+ * Racine du pod, en deux temps :
+ * 1. le triple `pim:storage` du profil WebID (voie canonique) ;
+ * 2. à défaut, la remontée par en-têtes Link — nécessaire pour les pods créés
+ *    par un serveur antérieur à l'écriture automatique de `pim:storage`, dont
+ *    le profil ne porte pas le triple.
+ */
+export async function getPrimaryPodUrl(webId: string): Promise<string> {
+  try {
+    const pods = await getPodUrlAll(webId, { fetch });
+    if (pods.length > 0) return pods[0];
+  } catch {
+    // Profil illisible ou sans triple : on tente la découverte par en-têtes.
+  }
+
+  const storage = await findStorageByLinkHeaders(webId);
+  if (storage) return storage;
+
+  throw new Error(
+    "Racine du pod introuvable : ni triple pim:storage dans le profil WebID, " +
+      "ni en-tête Link pim:Storage sur les containers parents."
+  );
 }
 
 export function trackerContainer(podUrl: string): string {
@@ -95,13 +152,14 @@ export async function readSeanceModele(modeleUrl: string): Promise<SeanceModele>
         }));
 
       return {
+        url: blocUrl,
         titre: getStringNoLocale(blocThing, st.titre) ?? "(sans titre)",
         ordre: getInteger(blocThing, st.ordre) ?? 0,
         dureeSecondes: getInteger(blocThing, st.dureeSecondes) ?? 0,
         exercices,
       } satisfies Bloc;
     })
-    .filter((b): b is Bloc => b !== null)
+    .filter((b): b is NonNullable<typeof b> => b !== null)
     .sort((a, b) => a.ordre - b.ordre);
 
   return {
@@ -256,4 +314,113 @@ export async function createCarnet(podUrl: string, input: NewCarnet): Promise<st
   await saveSolidDatasetAt(carnetDocUrl, setThing(createSolidDataset(), carnetBuilder.build()), { fetch });
 
   return carnetContainerUrl;
+}
+
+/**
+ * Vrai si l'échec vient de l'authentification plutôt que de la ressource.
+ * Sur un pod privé, un jeton expiré fait répondre 401 à *tout*, y compris aux
+ * sondes d'existence — l'erreur brute renvoyée est alors trompeuse.
+ */
+export function isAuthError(err: unknown): boolean {
+  return err instanceof FetchError && (err.statusCode === 401 || err.statusCode === 403);
+}
+
+/**
+ * Message court mais diagnostiquable : le graphe d'erreur renvoyé par le
+ * serveur est illisible, mais l'URL et le code, eux, sont indispensables pour
+ * savoir *quelle* ressource a refusé l'accès.
+ */
+export function describePodError(err: unknown): string {
+  if (!(err instanceof FetchError)) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  const url = err.message.match(/at \[([^\]]+)\]/)?.[1] ?? "ressource inconnue";
+  if (isAuthError(err)) {
+    return `Accès refusé (${err.statusCode}) sur ${url} — session expirée, ou ce pod n'est pas celui de ton compte.`;
+  }
+  return `Échec (${err.statusCode}) sur ${url}.`;
+}
+
+export function seancesContainer(carnetContainerUrl: string): string {
+  return new URL("seances/", carnetContainerUrl).toString();
+}
+
+export interface BlocRealiseInput {
+  /** URL du st:Bloc du modèle dont ce bloc réalisé est l'occurrence. */
+  blocUrl?: string;
+  titre: string;
+  complete: boolean;
+  dureeReelleSecondes: number;
+}
+
+export interface NewSeanceLog {
+  modeleUrl: string;
+  dateRealisation: Date;
+  dureeReelleSecondes: number;
+  ressenti?: string;
+  blocs: BlocRealiseInput[];
+}
+
+/** `2026-08-29` — nom de fichier par défaut d'une séance, en heure locale. */
+function isoDate(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+async function exists(url: string): Promise<boolean> {
+  try {
+    await getSolidDataset(url, { fetch });
+    return true;
+  } catch (err) {
+    if (err instanceof FetchError && err.statusCode === 404) return false;
+    throw err;
+  }
+}
+
+/**
+ * Écrit le log d'une séance réalisée sous `<carnet>/seances/`. Un seul write,
+ * en fin de séance : des écritures incrémentales en cours d'effort exposeraient
+ * à des enregistrements partiels au moindre incident réseau.
+ * Nommé `<date>.ttl`, suffixé de l'heure si la journée a déjà une séance.
+ */
+export async function logSeance(carnetContainerUrl: string, log: NewSeanceLog): Promise<string> {
+  const container = seancesContainer(carnetContainerUrl);
+  await ensureContainer(container);
+
+  const day = isoDate(log.dateRealisation);
+  let docUrl = new URL(`${day}.ttl`, container).toString();
+  if (await exists(docUrl)) {
+    const time = log.dateRealisation.toTimeString().slice(0, 8).replace(/:/g, "");
+    docUrl = new URL(`${day}-${time}.ttl`, container).toString();
+  }
+
+  let dataset = createSolidDataset();
+  const blocUrls: string[] = [];
+
+  log.blocs.forEach((bloc, i) => {
+    const url = `${docUrl}#bloc-${i}`;
+    blocUrls.push(url);
+    let builder = buildThing(createThing({ url }))
+      .addUrl(RDF.type, st.BlocRealise)
+      .setStringNoLocale(st.titre, bloc.titre)
+      // Booléen encodé en 0/1, même convention que st:afficherTimer.
+      .setInteger(st.complete, bloc.complete ? 1 : 0)
+      .setInteger(st.dureeReelleSecondes, bloc.dureeReelleSecondes);
+    if (bloc.blocUrl) builder = builder.setUrl(st.baseSurBloc, bloc.blocUrl);
+    dataset = setThing(dataset, builder.build());
+  });
+
+  let seance = buildThing(createThing({ url: `${docUrl}#it` }))
+    .addUrl(RDF.type, st.SeanceInstance)
+    .setUrl(st.baseSurModele, log.modeleUrl)
+    .setDatetime(st.dateRealisation, log.dateRealisation)
+    .setInteger(st.dureeReelleSecondes, log.dureeReelleSecondes);
+  if (log.ressenti) seance = seance.setStringNoLocale(st.ressenti, log.ressenti);
+  blocUrls.forEach((url) => {
+    seance = seance.addUrl(st.blocRealise, url);
+  });
+  dataset = setThing(dataset, seance.build());
+
+  await saveSolidDatasetAt(docUrl, dataset, { fetch });
+  return docUrl;
 }

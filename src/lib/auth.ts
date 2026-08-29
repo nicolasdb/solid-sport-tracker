@@ -27,8 +27,31 @@ export async function discoverOidcIssuer(webId: string): Promise<string> {
   return issuer;
 }
 
-export async function loginWithWebId(webId: string): Promise<void> {
-  const oidcIssuer = await discoverOidcIssuer(webId);
+/** Vrai si l'URL expose une configuration OpenID Connect — donc est un fournisseur. */
+async function isOidcIssuer(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(new URL(".well-known/openid-configuration", url).toString());
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Accepte indifféremment un WebID ou l'URL d'un fournisseur OIDC. Passer le
+ * fournisseur directement évite la lecture du profil : c'est lui qui nous
+ * rendra le WebID après redirection. Un identifiant avec fragment est
+ * forcément un WebID, on ne sonde alors pas inutilement.
+ */
+export async function resolveOidcIssuer(identifier: string): Promise<string> {
+  if (!identifier.includes("#") && (await isOidcIssuer(identifier))) {
+    return identifier;
+  }
+  return discoverOidcIssuer(identifier);
+}
+
+export async function loginWithIdentifier(identifier: string): Promise<void> {
+  const oidcIssuer = await resolveOidcIssuer(identifier);
   await login({
     oidcIssuer,
     redirectUrl: window.location.href.split("?")[0],
