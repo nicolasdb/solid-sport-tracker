@@ -8,7 +8,15 @@ import {
   getInteger,
   getContainedResourceUrlAll,
   getPodUrlAll,
+  createContainerAt,
+  createThing,
+  createSolidDataset,
+  buildThing,
+  setThing,
+  saveSolidDatasetAt,
+  FetchError,
 } from "@inrupt/solid-client";
+import { RDF } from "@inrupt/vocab-common-rdf";
 import { authFetch as fetch } from "./auth";
 import { st, type Bloc, type Carnet, type Exercice, type Preferences, type SeanceModele } from "../vocab/carnet";
 
@@ -105,7 +113,15 @@ export async function readSeanceModele(modeleUrl: string): Promise<SeanceModele>
 
 export async function readPreferences(podUrl: string): Promise<Preferences> {
   const url = preferencesUrl(podUrl);
-  const dataset = await getSolidDataset(url, { fetch });
+  let dataset;
+  try {
+    dataset = await getSolidDataset(url, { fetch });
+  } catch (err) {
+    if (err instanceof FetchError && err.statusCode === 404) {
+      return { afficherTimer: true };
+    }
+    throw err;
+  }
   const thing = getThing(dataset, `${url}#it`);
   if (!thing) {
     return { afficherTimer: true };
@@ -115,4 +131,129 @@ export async function readPreferences(podUrl: string): Promise<Preferences> {
     tenueParDefaut: getStringNoLocale(thing, st.tenueParDefaut) ?? undefined,
     afficherTimer: getInteger(thing, st.afficherTimer) !== 0,
   };
+}
+
+async function ensureContainer(url: string): Promise<void> {
+  try {
+    await getSolidDataset(url, { fetch });
+  } catch (err) {
+    if (err instanceof FetchError && err.statusCode === 404) {
+      await createContainerAt(url, { fetch });
+      return;
+    }
+    throw err;
+  }
+}
+
+async function ensurePreferences(podUrl: string): Promise<void> {
+  const url = preferencesUrl(podUrl);
+  try {
+    await getSolidDataset(url, { fetch });
+  } catch (err) {
+    if (!(err instanceof FetchError) || err.statusCode !== 404) throw err;
+    const thing = buildThing(createThing({ url: `${url}#it` }))
+      .addUrl(RDF.type, st.Preferences)
+      .setInteger(st.afficherTimer, 1)
+      .build();
+    await saveSolidDatasetAt(url, setThing(createSolidDataset(), thing), { fetch });
+  }
+}
+
+/**
+ * Crée /sport-tracker/, /sport-tracker/carnets/ et preferences.ttl s'ils
+ * n'existent pas encore. Idempotent — ne touche à rien si déjà en place.
+ * Ne gère pas les ACL : les ressources créées héritent du contrôle d'accès
+ * du container parent le plus proche (privé par défaut sur un pod perso).
+ */
+export async function ensureTrackerScaffold(podUrl: string): Promise<void> {
+  await ensureContainer(trackerContainer(podUrl));
+  await ensureContainer(carnetsContainer(podUrl));
+  await ensurePreferences(podUrl);
+}
+
+function slugify(titre: string): string {
+  const slug = titre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return slug || "carnet";
+}
+
+export interface NewCarnet {
+  titre: string;
+  objectif?: string;
+  frequence?: string;
+  modele: Pick<SeanceModele, "titre" | "blocs">;
+}
+
+function buildModeleDataset(modeleDocUrl: string, modele: NewCarnet["modele"]) {
+  let dataset = createSolidDataset();
+  const blocUrls: string[] = [];
+
+  modele.blocs.forEach((bloc, blocIdx) => {
+    const blocUrl = `${modeleDocUrl}#bloc-${blocIdx}`;
+    blocUrls.push(blocUrl);
+    const exerciceUrls: string[] = [];
+
+    bloc.exercices.forEach((ex, exIdx) => {
+      const exUrl = `${modeleDocUrl}#bloc-${blocIdx}-ex-${exIdx}`;
+      exerciceUrls.push(exUrl);
+      let exBuilder = buildThing(createThing({ url: exUrl }))
+        .addUrl(RDF.type, st.Exercice)
+        .setStringNoLocale(st.titre, ex.titre);
+      if (ex.repetitions) exBuilder = exBuilder.setStringNoLocale(st.repetitions, ex.repetitions);
+      if (ex.dureeSecondes) exBuilder = exBuilder.setInteger(st.dureeSecondes, ex.dureeSecondes);
+      if (ex.note) exBuilder = exBuilder.setStringNoLocale(st.note, ex.note);
+      dataset = setThing(dataset, exBuilder.build());
+    });
+
+    let blocBuilder = buildThing(createThing({ url: blocUrl }))
+      .addUrl(RDF.type, st.Bloc)
+      .setStringNoLocale(st.titre, bloc.titre)
+      .setInteger(st.ordre, bloc.ordre)
+      .setInteger(st.dureeSecondes, bloc.dureeSecondes);
+    exerciceUrls.forEach((exUrl) => {
+      blocBuilder = blocBuilder.addUrl(st.contientExercice, exUrl);
+    });
+    dataset = setThing(dataset, blocBuilder.build());
+  });
+
+  let seanceBuilder = buildThing(createThing({ url: `${modeleDocUrl}#seance` }))
+    .addUrl(RDF.type, st.SeanceModele)
+    .setStringNoLocale(st.titre, modele.titre);
+  blocUrls.forEach((blocUrl) => {
+    seanceBuilder = seanceBuilder.addUrl(st.contientBloc, blocUrl);
+  });
+  dataset = setThing(dataset, seanceBuilder.build());
+
+  return dataset;
+}
+
+/**
+ * Crée un nouveau carnet (container + carnet.ttl + modele.ttl) sur le pod.
+ * Crée aussi le scaffold /sport-tracker/ s'il n'existe pas encore.
+ * Retourne l'URL du container du carnet créé.
+ */
+export async function createCarnet(podUrl: string, input: NewCarnet): Promise<string> {
+  await ensureTrackerScaffold(podUrl);
+
+  const slug = `${slugify(input.titre)}-${Date.now().toString(36)}`;
+  const carnetContainerUrl = new URL(`${slug}/`, carnetsContainer(podUrl)).toString();
+  await createContainerAt(carnetContainerUrl, { fetch });
+
+  const modeleDocUrl = new URL("modele.ttl", carnetContainerUrl).toString();
+  await saveSolidDatasetAt(modeleDocUrl, buildModeleDataset(modeleDocUrl, input.modele), { fetch });
+
+  const carnetDocUrl = new URL("carnet.ttl", carnetContainerUrl).toString();
+  let carnetBuilder = buildThing(createThing({ url: `${carnetDocUrl}#it` }))
+    .addUrl(RDF.type, st.Carnet)
+    .setStringNoLocale(st.titre, input.titre)
+    .setUrl(st.seanceModele, `${modeleDocUrl}#seance`);
+  if (input.objectif) carnetBuilder = carnetBuilder.setStringNoLocale(st.objectif, input.objectif);
+  if (input.frequence) carnetBuilder = carnetBuilder.setStringNoLocale(st.frequence, input.frequence);
+  await saveSolidDatasetAt(carnetDocUrl, setThing(createSolidDataset(), carnetBuilder.build()), { fetch });
+
+  return carnetContainerUrl;
 }

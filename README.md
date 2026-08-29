@@ -31,6 +31,9 @@ aucun provider n'est codé en dur côté app.
   (`SequenceTimer`), indépendant du reste pour rester testable seul.
 - `src/vocab/carnet.ts` — prédicats du vocabulaire `st:` + types TS
   correspondants.
+- `src/lib/example-programme.ts` — le programme "Échauffement quotidien"
+  (semaine 1) encodé en `NewCarnet`, utilisé pour tester l'écriture de bout
+  en bout.
 - `docs/data-model.md` — schéma complet en Turtle, layout des containers sur
   le pod, exemple concret basé sur un vrai programme.
 
@@ -41,19 +44,28 @@ aucun provider n'est codé en dur côté app.
   son modèle de séance.
 - ✅ Timer séquentiel sur les blocs de la séance (démarrer/pause/passer/
   réinitialiser).
-- ⏳ Écriture sur le pod (créer un carnet depuis un programme collé, logger
-  une séance réalisée) — pas encore implémenté, lecture seule pour l'instant.
+- ✅ Écriture sur le pod : `ensureTrackerScaffold` crée `/sport-tracker/`,
+  `/sport-tracker/carnets/` et `preferences.ttl` s'ils n'existent pas encore
+  (appelé automatiquement au login) ; `createCarnet` écrit un carnet complet
+  (container + `carnet.ttl` + `modele.ttl`). Rien n'écrit d'ACL — les
+  ressources créées héritent du contrôle d'accès du container parent le plus
+  proche, privé par défaut sur un pod perso.
+- ⏳ Logger une séance réalisée (`st:SeanceInstance`) — pas encore
+  implémenté, seule la création du carnet/modèle est branchée.
 - ⏳ UI vraiment "dynamique selon les préférences" — aujourd'hui l'app
   affiche juste le premier carnet trouvé; le choix du carnet actif via
   `st:carnetActif` (préférences) reste à brancher.
 - ⏳ Extraction d'un programme texte (comme celui de la semaine 1) vers la
   structure RDF `st:SeanceModele`/`st:Bloc`/`st:Exercice` — à faire en
-  assisté (LLM + validation avant écriture), pas en automatique pur.
+  assisté (LLM + validation avant écriture), pas en automatique pur. En
+  attendant, `src/lib/example-programme.ts` sert de cas de test écrit à la
+  main pour valider le chemin d'écriture de bout en bout.
 
 ## Prérequis sur le pod
 
 Le WebID doit déclarer un `pim:storage` (racine du pod) et un
 `solid:oidcIssuer`, ce qui est standard sur Community Solid Server / NSS.
-Le container `/sport-tracker/carnets/<id>/` avec `carnet.ttl` et
-`modele.ttl` doit exister pour qu'un carnet s'affiche — voir
-`docs/data-model.md` pour la structure exacte et un exemple.
+Rien d'autre n'est requis à l'avance : au premier login, l'app crée
+`/sport-tracker/`, `/sport-tracker/carnets/` et `preferences.ttl` s'ils
+n'existent pas, et propose de créer le carnet d'exemple si aucun carnet
+n'est trouvé. Voir `docs/data-model.md` pour la structure exacte.

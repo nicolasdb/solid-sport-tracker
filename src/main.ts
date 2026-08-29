@@ -1,6 +1,15 @@
 import "./style.css";
 import { completeLogin, getSession, loginWithWebId, logout } from "./lib/auth";
-import { carnetsContainer, getPrimaryPodUrl, listCarnetUrls, readCarnet, readSeanceModele } from "./lib/pod";
+import {
+  carnetsContainer,
+  createCarnet,
+  ensureTrackerScaffold,
+  getPrimaryPodUrl,
+  listCarnetUrls,
+  readCarnet,
+  readSeanceModele,
+} from "./lib/pod";
+import { echauffementSemaine1 } from "./lib/example-programme";
 import { SequenceTimer, formatSeconds, type TimerState } from "./lib/timer";
 import type { SeanceModele } from "./vocab/carnet";
 
@@ -76,6 +85,7 @@ function renderErrorView(webId: string, err: unknown) {
 
 async function renderApp(webId: string) {
   const podUrl = await getPrimaryPodUrl(webId);
+  await ensureTrackerScaffold(podUrl);
   const carnetUrls = await listCarnetUrls(podUrl);
 
   if (carnetUrls.length === 0) {
@@ -83,9 +93,21 @@ async function renderApp(webId: string) {
       <main class="screen">
         <p class="lead">Connecté en tant que <code>${webId}</code>.</p>
         <p>Aucun carnet trouvé sous <code>${carnetsContainer(podUrl)}</code>.</p>
+        <button id="create-example">Créer le carnet d'exemple: "${echauffementSemaine1.titre}"</button>
         <button id="logout">Se déconnecter</button>
       </main>
     `;
+    document.querySelector<HTMLButtonElement>("#create-example")!.addEventListener("click", async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      btn.disabled = true;
+      btn.textContent = "Création en cours…";
+      try {
+        await createCarnet(podUrl, echauffementSemaine1);
+        await renderApp(webId);
+      } catch (err) {
+        renderErrorView(webId, err);
+      }
+    });
     document.querySelector<HTMLButtonElement>("#logout")!.addEventListener("click", async () => {
       await logout();
       renderLoginView();
