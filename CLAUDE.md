@@ -43,8 +43,8 @@ serve files from the gateway itself: that would mean editing the shared
 `hetzner-gateway` compose and restarting the proxy in front of every other
 service. Proxying to a container is the pattern every other `conf.d` file uses.
 
-The gateway vhost is versioned here as `deploy/gateway-12-sportr.conf` but must
-be installed into `hetzner-gateway/nginx/conf.d/12-sportr.conf` and deployed
+The gateway vhost is versioned here as `deploy/gateway-14-sportr.conf` but must
+be installed into `hetzner-gateway/nginx/conf.d/14-sportr.conf` and deployed
 from that repo — it stays the source of truth for routing.
 
 `dist/` is a bind mount, so a new build is served without restarting the

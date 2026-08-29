@@ -37,7 +37,7 @@ make vps-deploy   # build + rsync + docker compose up -d
 (`docker-compose.yml`, nginx alpine sur le réseau `gateway`), derrière
 `nginx-gateway` qui assure TLS et routage. Le vhost à installer dans
 [`hetzner-gateway`](https://github.com/nicolasdb/hetzner-gateway) est versionné
-ici : `deploy/gateway-12-sportr.conf` — à copier en `nginx/conf.d/12-sportr.conf`
+ici : `deploy/gateway-14-sportr.conf` — à copier en `nginx/conf.d/14-sportr.conf`
 puis déployer depuis ce dépôt-là, qui reste la source de vérité du routage.
 
 `dist/` est monté en volume : un simple `make vps-push` suffit à publier un

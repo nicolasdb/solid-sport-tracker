@@ -21,7 +21,7 @@ help: ## Affiche cette aide
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 	@echo
 	@echo "Déploiement : sportr.nicolasdb.eu → conteneur sportr-web (réseau gateway)."
-	@echo "Le routage nginx vit dans hetzner-gateway ; voir deploy/gateway-12-sportr.conf."
+	@echo "Le routage nginx vit dans hetzner-gateway ; voir deploy/gateway-14-sportr.conf."
 
 # ── Local ────────────────────────────────────────────────────────────────────
 
