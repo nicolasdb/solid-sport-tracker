@@ -30,6 +30,7 @@ import {
   type TimerState,
 } from "./lib/timer";
 import { ScreenWakeLock } from "./lib/wake-lock";
+import { SessionSignals, type SignalKind, type SignalPrefs } from "./lib/signals";
 import {
   describeStep,
   flattenSteps,
@@ -559,8 +560,44 @@ function renderTimerBar(firstDuration: number): string {
         <button id="timer-reset" class="ghost">Réinit.</button>
         <button id="timer-finish" class="ghost">Terminer</button>
       </div>
+      <div class="timer-toggles">
+        <button id="opt-sound" class="chip" type="button" aria-pressed="false">🔊 Bip</button>
+        <button id="opt-haptic" class="chip" type="button" aria-pressed="false">📳 Vibration</button>
+        <button id="opt-screen" class="chip" type="button" aria-pressed="false">🔆 Écran</button>
+      </div>
     </section>
   `;
+}
+
+/**
+ * Réglages de séance. Ils vivent dans le navigateur et non sur le pod : ils
+ * décrivent l'appareil du moment, pas l'usager — un téléphone vibre, un
+ * portable non, et le contexte change d'une séance à l'autre (yoga en
+ * silence, course avec un casque).
+ */
+interface DevicePrefs extends SignalPrefs {
+  screenOn: boolean;
+}
+
+const DEVICE_PREFS_KEY = "sst:device-prefs";
+
+const DEFAULT_DEVICE_PREFS: DevicePrefs = { sound: true, haptic: true, screenOn: true };
+
+function loadDevicePrefs(): DevicePrefs {
+  try {
+    const raw = localStorage.getItem(DEVICE_PREFS_KEY);
+    return raw ? { ...DEFAULT_DEVICE_PREFS, ...JSON.parse(raw) } : { ...DEFAULT_DEVICE_PREFS };
+  } catch {
+    return { ...DEFAULT_DEVICE_PREFS };
+  }
+}
+
+function saveDevicePrefs(prefs: DevicePrefs): void {
+  try {
+    localStorage.setItem(DEVICE_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // Stockage indisponible : les réglages ne survivent pas à la session, tant pis.
+  }
 }
 
 /** Nombre de blocs suivants gardés visibles sur petit écran, en plus du bloc courant. */
@@ -578,6 +615,25 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   const blocItems = Array.from(document.querySelectorAll<HTMLLIElement>("li.bloc"));
 
   const wakeLock = new ScreenWakeLock();
+  const prefs = loadDevicePrefs();
+  const signals = new SessionSignals(prefs);
+  wireDevicePrefs(prefs, signals, wakeLock, () => timer.getSnapshot().running);
+
+  /**
+   * Un signal marque une fin d'étape, mais toutes les fins ne se valent pas :
+   * une phase d'intervalle enchaîne dans le même effort, une fin d'étape
+   * appelle une transition. On distingue les deux en regardant si l'étape
+   * suivante vient encore du même `IntervalStep`.
+   */
+  const endSignal = (index: number): SignalKind => {
+    const current = steps[index];
+    const next = steps[index + 1];
+    if (!next) return "session";
+    if (current?.sourceStep.kind === "interval" && next.sourceStep === current.sourceStep) {
+      return "phase";
+    }
+    return "step";
+  };
 
   let recapOpened = false;
   const openRecap = () => {
@@ -597,7 +653,36 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     void wakeLock.reacquire();
   });
 
+  let previous: TimerState | null = null;
+
+  const signalTransitions = (state: TimerState) => {
+    const prev = previous;
+    previous = state;
+    if (!prev) return;
+
+    // Une étape vient de se clore. On ne signale qu'une progression : une
+    // remise à zéro reviendrait en arrière et ne mérite pas de bip.
+    if (state.stepIndex > prev.stepIndex) {
+      signals.emit(endSignal(prev.stepIndex));
+      return;
+    }
+
+    // Décompte des dernières secondes : c'est ce qui permet de se préparer
+    // sans regarder l'écran.
+    if (
+      state.running &&
+      state.timed &&
+      state.remaining > 0 &&
+      state.remaining <= 3 &&
+      state.remaining !== prev.remaining
+    ) {
+      signals.emit("tick");
+    }
+  };
+
   const render = (state: TimerState) => {
+    signalTransitions(state);
+
     if (state.done) {
       label.textContent = "Séance terminée !";
       toggleBtn.textContent = "Démarrer";
@@ -635,6 +720,9 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   timer.subscribe(render);
 
   toggleBtn.addEventListener("click", () => {
+    // Ce tap est le geste utilisateur dont l'AudioContext a besoin pour sortir
+    // de l'état suspendu ; sans lui, aucun bip ne sortira de la séance.
+    signals.arm();
     const state = timer.getSnapshot();
     if (state.running && !state.timed) {
       timer.complete();
@@ -643,7 +731,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
       void wakeLock.release();
     } else {
       timer.start();
-      void wakeLock.acquire();
+      if (prefs.screenOn) void wakeLock.acquire();
     }
   });
   skipBtn.addEventListener("click", () => timer.skip());
@@ -653,6 +741,53 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     void wakeLock.release();
   });
   finishBtn.addEventListener("click", openRecap);
+}
+
+/**
+ * Les trois options de séance. Elles s'appliquent immédiatement, y compris en
+ * pleine séance : c'est le moment où on découvre qu'on est dans une salle
+ * silencieuse.
+ */
+function wireDevicePrefs(
+  prefs: DevicePrefs,
+  signals: SessionSignals,
+  wakeLock: ScreenWakeLock,
+  isRunning: () => boolean
+): void {
+  const soundBtn = document.querySelector<HTMLButtonElement>("#opt-sound")!;
+  const hapticBtn = document.querySelector<HTMLButtonElement>("#opt-haptic")!;
+  const screenBtn = document.querySelector<HTMLButtonElement>("#opt-screen")!;
+
+  // Sans support haptique (iOS, poste de bureau) l'option ment : on la retire
+  // plutôt que d'afficher un bouton sans effet.
+  if (!signals.hapticSupported) hapticBtn.hidden = true;
+  if (!wakeLock.supported) screenBtn.hidden = true;
+
+  const paint = () => {
+    soundBtn.setAttribute("aria-pressed", String(prefs.sound));
+    hapticBtn.setAttribute("aria-pressed", String(prefs.haptic));
+    screenBtn.setAttribute("aria-pressed", String(prefs.screenOn));
+  };
+
+  const toggle = (key: keyof DevicePrefs) => async () => {
+    prefs[key] = !prefs[key];
+    saveDevicePrefs(prefs);
+    signals.setPrefs(prefs);
+    paint();
+
+    if (key === "sound" && prefs.sound) signals.arm();
+    // Un aperçu du signal : on n'active pas une option à l'aveugle.
+    if (key !== "screenOn" && prefs[key]) signals.emit("phase");
+    if (key === "screenOn") {
+      if (prefs.screenOn && isRunning()) await wakeLock.acquire();
+      if (!prefs.screenOn) await wakeLock.release();
+    }
+  };
+
+  soundBtn.addEventListener("click", toggle("sound"));
+  hapticBtn.addEventListener("click", toggle("haptic"));
+  screenBtn.addEventListener("click", toggle("screenOn"));
+  paint();
 }
 
 interface RecapRow {

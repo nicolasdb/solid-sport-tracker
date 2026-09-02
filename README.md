@@ -57,6 +57,9 @@ nouveau build, sans redémarrer le conteneur.
   le temps en deltas d'horloge, pas en comptant les ticks.
 - `src/lib/wake-lock.ts` — `ScreenWakeLock`, garde l'écran allumé pendant
   une séance et reprend le verrou au retour en premier plan.
+- `src/lib/signals.ts` — `SessionSignals` : bips et vibrations. La table
+  `PATTERNS` est le seul endroit à toucher pour affiner le vocabulaire
+  haptique.
 - `src/vocab/carnet.ts` — prédicats du vocabulaire `st:` + types TS
   correspondants.
 - `src/vocab/protocol.ts` — vocabulaire `act:` (recette → carnet → session),
@@ -88,6 +91,13 @@ nouveau build, sans redémarrer le conteneur.
 - ✅ Durée de séance enregistrée dans tous les cas : c'est la durée murale
   depuis le premier démarrage (pauses et transitions comprises), pas la somme
   des blocs chronométrés.
+- ✅ Suivre la séance sans regarder l'écran : bip (Web Audio, aucun fichier
+  son) et vibration sur le décompte des 3 dernières secondes, la fin d'une
+  phase d'intervalle, la fin d'une étape et la fin de séance — quatre motifs
+  distinguables à l'oreille et au poignet. Trois options le long du minuteur
+  (bip, vibration, écran allumé) se règlent en pleine séance : silence en
+  yoga collectif, son en courant. Elles vivent dans le navigateur, pas sur le
+  pod — elles décrivent l'appareil du moment, pas l'usager.
 - ✅ UI pensée mobile : colonne pleine hauteur en `dvh`, minuteur ancré en
   bas avec marges `env(safe-area-inset-*)` pour ne pas passer sous les
   barres du navigateur, et programme réduit au bloc courant + 2 suivants
@@ -145,8 +155,9 @@ de carnets et les étapes typées — pas l'analyse.
 
 - ⏳ Choix parmi plusieurs carnets, et déblocage d'un stage suivant d'une
   recette multi-stages.
-- ⏳ Signal de fin de phase (son, vibration) pour les intervalles : un
-  métronome qu'il faut regarder ne sert à rien.
+- ⏳ Motifs haptiques différenciés par type d'étape — aujourd'hui les motifs
+  distinguent l'événement (décompte, fin de phase, fin d'étape, fin de
+  séance), pas encore la nature de l'étape.
 - ✅ Skill d'écriture de recettes (`skills/recipe-author/`) : du langage
   naturel vers une recette valide, hors de l'app — le tracker reste bête et
   sans dépendance à un modèle. L'humain valide un résumé lisible, jamais du

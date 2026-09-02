@@ -110,6 +110,18 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   session. The browser drops the lock whenever the page is hidden, hence
   `reacquire()` on `visibilitychange`; unsupported (Firefox mobile, insecure
   contexts) degrades silently rather than erroring.
+- `src/lib/signals.ts` — `SessionSignals`: beeps (Web Audio, no asset to
+  load) and vibration, so a session can be followed without looking at the
+  screen. `PATTERNS` maps event → tones + vibration and is the single place to
+  refine the haptic vocabulary; the intent is a pattern per step type, today
+  it is a pattern per event. Two constraints that shape the code: `navigator.
+  vibrate` does not exist on iOS Safari and does nothing while the page is
+  hidden (which is why the screen lock matters), and an `AudioContext` starts
+  suspended unless created from a user gesture — hence `arm()` on the
+  Démarrer tap.
+  Sound/haptic/screen toggles are stored in `localStorage`, **not** on the
+  pod: they describe the device and the room (silent yoga class vs running
+  with headphones), not the user.
 - `public/recipes/echauffement.ttl` — the example recipe, in Turtle, served by
   the app itself. Loaded **by URI**, never imported from code: the discovery
   path a third-party recipe would take is exercised from the first carnet on.
