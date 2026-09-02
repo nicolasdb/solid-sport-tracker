@@ -65,6 +65,9 @@ nouveau build, sans redémarrer le conteneur.
   carnet avec provenance, écriture et relecture des séances.
 - `public/recipes/echauffement.ttl` — la recette d'exemple, en Turtle,
   chargée par son adresse et non importée depuis le code.
+- `skills/recipe-author/SKILL.md` — le skill d'écriture de recettes, à coller
+  dans le chat LLM de ton choix. Il lit le vocabulaire depuis ce repo plutôt
+  que de l'avoir en dur, pour ne pas dériver du modèle réel.
 - `docs/data-model.md` — schéma complet en Turtle, layout des containers sur
   le pod, exemple concret basé sur un vrai programme.
 
@@ -144,9 +147,11 @@ de carnets et les étapes typées — pas l'analyse.
   recette multi-stages.
 - ⏳ Signal de fin de phase (son, vibration) pour les intervalles : un
   métronome qu'il faut regarder ne sert à rien.
-- ⏳ Skill d'écriture de recettes : du langage naturel vers une recette
-  valide, hors de l'app (le tracker reste bête et sans dépendance à un
-  modèle). L'humain valide un résumé lisible, jamais du Turtle.
+- ✅ Skill d'écriture de recettes (`skills/recipe-author/`) : du langage
+  naturel vers une recette valide, hors de l'app — le tracker reste bête et
+  sans dépendance à un modèle. L'humain valide un résumé lisible, jamais du
+  Turtle, et la publication sur un pod reste un geste explicite. Reste à
+  l'éprouver sur une vraie recette écrite de bout en bout.
 - ⏳ UI vraiment "dynamique selon les préférences" — aujourd'hui l'app
   affiche juste le premier carnet trouvé; le choix du carnet actif via
   `st:carnetActif` (préférences) reste à brancher.
