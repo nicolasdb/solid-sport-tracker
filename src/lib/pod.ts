@@ -345,8 +345,15 @@ export function describePodError(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
   }
   const url = err.message.match(/at \[([^\]]+)\]/)?.[1] ?? "ressource inconnue";
-  if (isAuthError(err)) {
-    return `Accès refusé (${err.statusCode}) sur ${url} — session expirée, ou ce pod n'est pas celui de ton compte.`;
+  // 401 et 403 n'ont pas le même remède : un 401 dit « je ne sais pas qui tu
+  // es » (jeton expiré, il faut se reconnecter), un 403 dit « je sais qui tu
+  // es et c'est non » — se reconnecter n'y changera rien. Les confondre envoie
+  // chercher une session expirée là où il manque une autorisation.
+  if (err.statusCode === 401) {
+    return `Non authentifié (401) sur ${url} — session expirée, reconnecte-toi.`;
+  }
+  if (err.statusCode === 403) {
+    return `Accès refusé (403) sur ${url} — ton identité est reconnue mais n'a pas les droits ici. C'est le cas d'un WebID d'agent, qui ne reçoit des droits que sur les containers qu'on lui a explicitement accordés, pas à la racine du pod.`;
   }
   return `Échec (${err.statusCode}) sur ${url}.`;
 }
