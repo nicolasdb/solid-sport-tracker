@@ -11,6 +11,8 @@ export interface TimerState {
   done: boolean;
   /** Bloc terminé, le suivant est armé mais attend le feu vert de l'usager. */
   awaitingReady: boolean;
+  /** Faux pour une étape comptée ou une checklist : c'est l'usager qui la clôt. */
+  timed: boolean;
 }
 
 /** Ce que le minuteur a observé pour une étape — base du log de séance. */
@@ -63,7 +65,10 @@ export class SequenceTimer {
   private stepStartedAt: number | null = null;
 
   constructor(steps: TimerStep[]) {
-    this.steps = steps.filter((s) => s.seconds > 0);
+    // Une étape à 0 seconde n'est pas ignorée : c'est une étape comptée ou une
+    // checklist, que l'usager valide lui-même. Le temps y court quand même —
+    // seule la fin automatique est désactivée.
+    this.steps = steps;
     this.elapsedMs = this.steps.map(() => 0);
     this.completed = this.steps.map(() => false);
   }
@@ -123,11 +128,20 @@ export class SequenceTimer {
   resync(): void {
     if (!this.running) return;
     this.foldElapsed();
-    if (this.remainingSeconds() <= 0) {
+    if (this.isTimed() && this.remainingSeconds() <= 0) {
       this.advance(true);
       return;
     }
     this.emit();
+  }
+
+  /** Valide l'étape courante — le geste de fin d'une étape non chronométrée. */
+  complete(): void {
+    this.advance(true);
+  }
+
+  private isTimed(): boolean {
+    return (this.steps[this.stepIndex]?.seconds ?? 0) > 0;
   }
 
   private stopTicking(): void {
@@ -196,6 +210,7 @@ export class SequenceTimer {
       running: this.running,
       done,
       awaitingReady: this.awaitingReady,
+      timed: this.isTimed(),
     };
   }
 

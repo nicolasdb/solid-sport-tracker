@@ -1,8 +1,97 @@
 # Modèle de données
 
-Vocabulaire provisoire (`https://vocab.nicolasdb.eu/sport-tracker#`, préfixe
-`st:`), pas encore publié comme document JSON-LD/Turtle résolvable — à faire
-une fois le modèle stabilisé par l'usage.
+Deux vocabulaires coexistent :
+
+- **`act:`** (`https://vocab.nicolasdb.eu/activity#`) — le modèle courant,
+  généralisé et indépendant du domaine sportif. C'est celui décrit ci-dessous
+  et implémenté dans `src/vocab/protocol.ts`.
+- **`st:`** (`https://vocab.nicolasdb.eu/sport-tracker#`) — le premier modèle,
+  spécifique au sport et limité à des blocs chronométrés. Il reste lu pour les
+  carnets déjà écrits (voir « Modèle historique `st:` » plus bas), mais rien
+  ne l'écrit plus. Il n'y a pas de migration : un carnet ancien reste
+  consultable tel quel.
+
+Ni l'un ni l'autre n'est encore publié comme document résolvable — à faire une
+fois le modèle stabilisé par l'usage.
+
+## Modèle courant `act:`
+
+Trois niveaux, et les distinguer est tout le propos :
+
+- `act:Protocol` — la **recette** : le protocole lui-même, versionné,
+  potentiellement hébergé sur le pod d'un tiers (kiné, coach). `act:title`,
+  `act:goal`, `act:cadence`, `act:hasStep`.
+- `act:Logbook` — le **carnet** : l'engagement d'une personne dans un
+  protocole. Unité de partage et granularité d'ACL — un container par carnet.
+  `act:title`, `act:protocol` (→ la copie locale), `act:sourceProtocol`
+  (l'URI d'origine, comme provenance).
+- `act:Session` — une **exécution**. `act:startedAt`, `act:durationSeconds`,
+  `act:feeling`, `act:hasRun` (→ `act:StepRun`).
+
+Le carnet **copie** son protocole au lieu d'y pointer : une v2 publiée par
+l'auteur changerait rétroactivement le protocole des séances déjà consignées,
+et le carnet cesserait d'être comparable à lui-même. Une v2 est une autre
+recette.
+
+### Étapes typées
+
+Une étape porte son type en `rdf:type`, et `act:order` pour le rang :
+
+- `act:TimedStep` — durée-cible : `act:targetSeconds`. Le minuteur signale la
+  fin ; il ne mesure pas une performance.
+- `act:CountedStep` — compte-cible : `act:targetCount` + `act:unit`
+  (« répétitions », « par jambe »). C'est l'usager qui clôt l'étape, pas
+  l'horloge.
+- `act:IntervalStep` — métronome : `act:hasPhase` (→ `act:Phase`, chacune
+  `act:title` + `act:targetSeconds`) répété `act:rounds` fois. Les ratios
+  asymétriques et évolutifs (1:1 → 2:2 → 2:5) sont des phases explicites, pas
+  une notion de ratio dans le modèle.
+- `act:ChecklistStep` — aucune mesure.
+- `act:RepeatStep` — imbrication : `act:times` + `act:hasStep`.
+  `3× [10 squats, 10 fentes, 10 push-ups]` n'est pas `3×10 squats` ; la
+  structure porte du sens pédagogique (rythme, mémorisation), et l'aplatir le
+  perdrait.
+
+Un type inconnu à la lecture est traité comme une checklist plutôt qu'ignoré :
+mieux vaut afficher une étape qu'en perdre une du protocole.
+
+### Ce qui est consigné
+
+`act:StepRun` — ce qu'une étape a donné : `act:ofStep` (→ l'étape du
+protocole), `act:title` **recopié** pour que le log reste lisible si le
+protocole change ensuite, `act:completed` (0/1), `act:durationSeconds`.
+
+`act:durationSeconds` sur la `act:Session` est la **durée murale** depuis le
+premier démarrage, pauses et transitions comprises — pas la somme des étapes
+chronométrées. Une séance reste ainsi mesurée même quand presque rien n'y est
+chronométré.
+
+### Layout
+
+```
+<pod>/sport-tracker/carnets/<carnet-id>/
+├── logbook.ttl               # act:Logbook — métadonnées + provenance
+├── protocol.ttl              # act:Protocol — copie locale, étapes typées
+└── sessions/
+    └── <date>.ttl            # act:Session + act:StepRun
+```
+
+Les fragments du protocole copié sont positionnels (`#step-1-0`) : les slugs
+de la recette d'origine ne sont pas garantis uniques une fois copiés, et un
+chemin positionnel est stable pour une copie donnée.
+
+La recette d'exemple, en Turtle et versionnée dans le repo, est
+`public/recipes/echauffement.ttl` — chargée par son URI, pas importée depuis
+le code, pour que le chemin de découverte soit exercé dès le premier carnet.
+
+---
+
+## Modèle historique `st:`
+
+Ce qui suit décrit les carnets écrits avant les étapes typées. Ils restent
+lisibles ; l'app les convertit à la lecture (un bloc chronométré devient une
+`act:TimedStep`) et continue d'écrire leurs séances dans `seances/` au même
+format, pour ne pas mélanger deux vocabulaires dans un même carnet.
 
 ## Layout sur le pod
 

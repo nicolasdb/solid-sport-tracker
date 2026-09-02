@@ -439,15 +439,18 @@ export async function logSeance(carnetContainerUrl: string, log: NewSeanceLog): 
  * URLs des séances loguées, en une seule requête (listing du container).
  * Container absent = aucune séance encore enregistrée, pas une erreur.
  */
-export async function listSeanceUrls(carnetContainerUrl: string): Promise<string[]> {
-  const container = seancesContainer(carnetContainerUrl);
+export async function listTurtleUrls(containerUrl: string): Promise<string[]> {
   try {
-    const dataset = await getSolidDataset(container, { fetch });
+    const dataset = await getSolidDataset(containerUrl, { fetch });
     return getContainedResourceUrlAll(dataset).filter((url) => url.endsWith(".ttl"));
   } catch (err) {
     if (err instanceof FetchError && err.statusCode === 404) return [];
     throw err;
   }
+}
+
+export function listSeanceUrls(carnetContainerUrl: string): Promise<string[]> {
+  return listTurtleUrls(seancesContainer(carnetContainerUrl));
 }
 
 /**

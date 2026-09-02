@@ -75,11 +75,21 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   reading, `createCarnet` for writing a full carnet (container + `carnet.ttl` +
   `modele.ttl`) in one call. No ACL handling anywhere — new resources inherit
   access control from the nearest parent container.
-- `src/vocab/carnet.ts` — the `st:` (sport-tracker) vocabulary: predicate/class
-  IRI constants plus the TS types (`Carnet`, `SeanceModele`, `Bloc`, `Exercice`,
-  `Preferences`) that mirror the Turtle shapes in `docs/data-model.md`. Change
-  the vocabulary here first, then update `docs/data-model.md` and any RDF
-  read/write code in `pod.ts` to match.
+- `src/vocab/protocol.ts` — the `act:` vocabulary and the TS types behind it:
+  `Protocol` (recipe) → `Logbook` (one person's engagement in it) → `Session`
+  (one run), plus the typed steps (`TimedStep`, `CountedStep`, `IntervalStep`,
+  `ChecklistStep`, `RepeatStep`). Change the vocabulary here first, then
+  `docs/data-model.md`, then the read/write code in `protocol-pod.ts`.
+  `flattenSteps` expands repeats and explodes intervals into per-phase steps —
+  that flattened list is what the timer and the programme list both consume, so
+  their indices stay aligned by construction.
+- `src/lib/protocol-pod.ts` — everything `act:`: `readProtocol` (any URI),
+  `createLogbookFromProtocol` (**copies** the protocol into the logbook and
+  keeps the origin URI as provenance only), `logSession`/`readSession`.
+- `src/vocab/carnet.ts` — the older `st:` vocabulary. Read-only in practice:
+  carnets written before typed steps are converted on read (`legacyToSteps` in
+  `main.ts`), and their sessions keep being written in their own format so a
+  single carnet never mixes two vocabularies. No migration exists, on purpose.
 - `src/lib/timer.ts` — `SequenceTimer`, a sequential timer over a séance's
   blocks (start/pause/skip/reset). Deliberately independent of pod/DOM code so
   it can be tested/reasoned about in isolation. It does **not** auto-chain: when
@@ -100,9 +110,10 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   session. The browser drops the lock whenever the page is hidden, hence
   `reacquire()` on `visibilitychange`; unsupported (Firefox mobile, insecure
   contexts) degrades silently rather than erroring.
-- `src/lib/example-programme.ts` — a hand-written `NewCarnet` ("Échauffement
-  quotidien", week 1) used to exercise the full write path (`createCarnet`)
-  end-to-end without needing an LLM-assisted import pipeline (not yet built).
+- `public/recipes/echauffement.ttl` — the example recipe, in Turtle, served by
+  the app itself. Loaded **by URI**, never imported from code: the discovery
+  path a third-party recipe would take is exercised from the first carnet on.
+  It deliberately uses all four step types and nesting.
 
 ### Session logging
 
@@ -207,21 +218,33 @@ Full schema, container layout, and a worked Turtle example are in
 ```
 preferences.ttl        # st:Preferences — drives dynamic UI (active carnet, etc.)
 carnets/<carnet-id>/
-  carnet.ttl            # st:Carnet — metadata + link to the séance model
-  modele.ttl            # st:SeanceModele — blocs + exercices
-  seances/<date>.ttl    # st:SeanceInstance — one log per completed séance (not yet implemented)
+  logbook.ttl           # act:Logbook — metadata + provenance of the recipe
+  protocol.ttl          # act:Protocol — local copy, typed steps
+  sessions/<date>.ttl   # act:Session + act:StepRun
 ```
+
+Carnets written before typed steps instead hold `carnet.ttl` / `modele.ttl` /
+`seances/<date>.ttl` in the `st:` vocabulary; both layouts are read, and the
+history view merges the two session containers so continuity stays readable
+across the change.
 
 One carnet = one container, so a per-carnet `.acl` can later scope sharing
 (e.g. with a coach) without exposing other carnets.
 
 ## Current state (POC) — not yet implemented
 
-- Logging a completed séance (`st:SeanceInstance`) — only carnet/modèle creation
-  is wired up.
+The focus is UX/UI and authoring: exercising the recipe → carnet → session
+vocabulary on real recipes is what the rest depends on. See
+`docs/todo-tracker-kit-dashboard.md` §1.
+
+- **Analytics is out of scope on purpose** — adherence stats and progression
+  belong to the dashboard, not here. The calendar stays as a continuity
+  overview and as the way to check a session actually reached the pod without
+  switching apps.
+- Writing a recipe from natural language — a skill that runs outside the app,
+  so the tracker stays dumb, offline-capable and free of any model dependency.
+  The human validates a readable summary, never Turtle.
 - UI actually driven by preferences — today the app just shows the first carnet
   found; wiring `st:carnetActif` to choose the active carnet is pending.
-- Importing a free-text programme into the `st:SeanceModele`/`st:Bloc`/`st:Exercice`
-  RDF structure — intended to be LLM-assisted with validation before writing, not
-  fully automatic. `example-programme.ts` stands in as a hand-encoded test case
-  for the write path until this exists.
+- Picking among several carnets, and unlocking a further stage of a
+  multi-stage recipe.

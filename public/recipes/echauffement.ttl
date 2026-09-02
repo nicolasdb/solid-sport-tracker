@@ -1,0 +1,94 @@
+@prefix act:  <https://vocab.nicolasdb.eu/activity#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# Échauffement quotidien — recette d'exemple.
+#
+# Versionnée dans le repo et servie en statique : c'est l'URI qui sert de
+# chemin de découverte, pas un import depuis le code. La même recette peut
+# être publiée telle quelle sur un pod public.
+#
+# Elle exerce volontairement les quatre types d'étape et l'imbrication :
+# l'ancien modèle ne savait exprimer que des durées, et « 3 x (10s marche
+# très rapide + 20s marche normale) » n'y était que du texte libre.
+
+<#it> a act:Protocol ;
+  act:title "Échauffement quotidien" ;
+  act:goal "Réveiller le corps et préparer la course sans forcer" ;
+  act:cadence "Chaque matin" ;
+  act:hasStep <#cardio>, <#mobilite>, <#renfo>, <#transition> .
+
+<#cardio> a act:TimedStep ;
+  act:order 1 ;
+  act:title "Activation cardiovasculaire" ;
+  act:note "Marche rapide ou vélo, respiration nasale si possible" ;
+  act:targetSeconds 300 .
+
+<#mobilite> a act:RepeatStep ;
+  act:order 2 ;
+  act:title "Mobilité articulaire" ;
+  act:times 2 ;
+  act:hasStep <#chevilles>, <#hanches>, <#epaules> .
+
+<#chevilles> a act:CountedStep ;
+  act:order 1 ;
+  act:title "Cercles de chevilles" ;
+  act:targetCount 10 ;
+  act:unit "dans chaque sens, par pied" .
+
+<#hanches> a act:CountedStep ;
+  act:order 2 ;
+  act:title "Balancements de jambe" ;
+  act:targetCount 12 ;
+  act:unit "par jambe" .
+
+<#epaules> a act:CountedStep ;
+  act:order 3 ;
+  act:title "Cercles d'épaules" ;
+  act:targetCount 10 ;
+  act:unit "avant puis arrière" .
+
+<#renfo> a act:RepeatStep ;
+  act:order 3 ;
+  act:title "Activation musculaire" ;
+  act:times 3 ;
+  act:hasStep <#squats>, <#fentes>, <#gainage>, <#equilibre> .
+
+<#squats> a act:CountedStep ;
+  act:order 1 ;
+  act:title "Squats au poids du corps" ;
+  act:targetCount 10 ;
+  act:unit "répétitions" .
+
+<#fentes> a act:CountedStep ;
+  act:order 2 ;
+  act:title "Fentes avant" ;
+  act:targetCount 10 ;
+  act:unit "par jambe" .
+
+<#gainage> a act:TimedStep ;
+  act:order 3 ;
+  act:title "Gainage ventral" ;
+  act:targetSeconds 20 .
+
+<#equilibre> a act:TimedStep ;
+  act:order 4 ;
+  act:title "Équilibre sur une jambe" ;
+  act:note "Yeux ouverts, changer de jambe à mi-temps" ;
+  act:targetSeconds 60 .
+
+<#transition> a act:IntervalStep ;
+  act:order 4 ;
+  act:title "Transition vers la course" ;
+  act:note "Ne pas courir : c'est la marche qui accélère" ;
+  act:rounds 3 ;
+  act:hasPhase <#transition-rapide>, <#transition-normale> .
+
+<#transition-rapide> a act:Phase ;
+  act:order 1 ;
+  act:title "marche très rapide" ;
+  act:targetSeconds 10 .
+
+<#transition-normale> a act:Phase ;
+  act:order 2 ;
+  act:title "marche normale" ;
+  act:targetSeconds 20 .

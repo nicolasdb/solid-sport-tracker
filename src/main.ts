@@ -2,20 +2,27 @@ import "./style.css";
 import { completeLogin, getSession, loginWithIdentifier, logout } from "./lib/auth";
 import {
   carnetsContainer,
-  createCarnet,
   ensureTrackerScaffold,
   describePodError,
   getPrimaryPodUrl,
   isAuthError,
   listCarnetUrls,
   listSeanceUrls,
+  listTurtleUrls,
   logSeance,
   readCarnet,
   readSeance,
   readSeanceModele,
   seanceDayFromUrl,
 } from "./lib/pod";
-import { echauffementSemaine1 } from "./lib/example-programme";
+import {
+  createLogbookFromProtocol,
+  logSession,
+  readLogbook,
+  readProtocol,
+  readSession,
+  sessionsContainer,
+} from "./lib/protocol-pod";
 import {
   SequenceTimer,
   formatSeconds,
@@ -23,6 +30,12 @@ import {
   type TimerState,
 } from "./lib/timer";
 import { ScreenWakeLock } from "./lib/wake-lock";
+import {
+  describeStep,
+  flattenSteps,
+  type RunnableStep,
+  type Step,
+} from "./vocab/protocol";
 import type { Bloc } from "./vocab/carnet";
 
 const DEFAULT_IDENTIFIER = "https://pod.nicolasdb.eu/";
@@ -95,6 +108,70 @@ function renderErrorView(webId: string, err: unknown) {
   });
 }
 
+/**
+ * Recette d'exemple servie par l'app elle-même. Elle est versionnée dans le
+ * repo (`public/recipes/`) plutôt qu'importée depuis le code : le chemin de
+ * découverte réel — une recette vient d'une adresse — est ainsi exercé dès le
+ * premier carnet, sans dépendre d'un pod tiers.
+ */
+const RECETTE_EXEMPLE = new URL("recipes/echauffement.ttl", location.href).toString();
+
+/**
+ * Un carnet, quel que soit son vocabulaire. Les carnets écrits avant les
+ * étapes typées (`st:`) sont convertis à la lecture : une seule vue, un seul
+ * minuteur, un seul récapitulatif, et l'ancien format n'a pas besoin de
+ * migration pour rester consultable.
+ */
+interface Programme {
+  titre: string;
+  objectif?: string;
+  cadence?: string;
+  steps: Step[];
+  /** Protocole de référence, recopié dans les séances écrites. */
+  protocolUrl?: string;
+  legacy: boolean;
+}
+
+/** Convertit un ancien modèle `st:` : un bloc chronométré devient une étape chronométrée. */
+function legacyToSteps(blocs: Bloc[]): Step[] {
+  return blocs.map((bloc) => ({
+    kind: "timed" as const,
+    url: bloc.url,
+    title: bloc.titre,
+    note: bloc.exercices
+      .map((ex) => (ex.repetitions ? `${ex.titre} — ${ex.repetitions}` : ex.titre))
+      .join(" · ") || undefined,
+    targetSeconds: bloc.dureeSecondes,
+  }));
+}
+
+async function loadProgramme(containerUrl: string): Promise<Programme> {
+  const logbook = await readLogbook(containerUrl);
+  if (logbook?.protocolUrl) {
+    const protocol = await readProtocol(logbook.protocolUrl);
+    return {
+      titre: logbook.title,
+      objectif: logbook.goal,
+      cadence: logbook.cadence,
+      steps: protocol.steps,
+      protocolUrl: protocol.url,
+      legacy: false,
+    };
+  }
+
+  const carnet = await readCarnet(containerUrl);
+  const modele = carnet.seanceModeleUrl ? await readSeanceModele(carnet.seanceModeleUrl) : null;
+  return {
+    titre: carnet.titre,
+    objectif: carnet.objectif,
+    cadence: carnet.frequence,
+    // Un bloc sans durée n'était pas exécutable dans l'ancien modèle.
+    steps: legacyToSteps(modele ? modele.blocs.filter((b) => b.dureeSecondes > 0) : []),
+    protocolUrl: carnet.seanceModeleUrl,
+    legacy: true,
+  };
+}
+
 async function renderApp(webId: string) {
   const podUrl = await getPrimaryPodUrl(webId);
   console.info("[sport-tracker] WebID:", webId, "→ racine du pod:", podUrl);
@@ -102,44 +179,19 @@ async function renderApp(webId: string) {
   const carnetUrls = await listCarnetUrls(podUrl);
 
   if (carnetUrls.length === 0) {
-    app.innerHTML = `
-      <main class="screen">
-        <p class="lead">Connecté en tant que <code>${webId}</code>.</p>
-        <p>Aucun carnet trouvé sous <code>${carnetsContainer(podUrl)}</code>.</p>
-        <button id="create-example">Créer le carnet d'exemple: "${echauffementSemaine1.titre}"</button>
-        <button id="logout">Se déconnecter</button>
-      </main>
-    `;
-    document.querySelector<HTMLButtonElement>("#create-example")!.addEventListener("click", async (e) => {
-      const btn = e.currentTarget as HTMLButtonElement;
-      btn.disabled = true;
-      btn.textContent = "Création en cours…";
-      try {
-        await createCarnet(podUrl, echauffementSemaine1);
-        await renderApp(webId);
-      } catch (err) {
-        renderErrorView(webId, err);
-      }
-    });
-    document.querySelector<HTMLButtonElement>("#logout")!.addEventListener("click", async () => {
-      await logout();
-      renderLoginView();
-    });
+    renderNewLogbookView(webId, podUrl);
     return;
   }
 
-  const carnet = await readCarnet(carnetUrls[0]);
-  const modele = carnet.seanceModeleUrl ? await readSeanceModele(carnet.seanceModeleUrl) : null;
-
-  // Le minuteur ignore les blocs sans durée ; on filtre ici aussi pour que les
-  // index de la liste affichée et ceux du minuteur restent alignés.
-  const blocs = modele ? modele.blocs.filter((b) => b.dureeSecondes > 0) : [];
+  const programme = await loadProgramme(carnetUrls[0]);
+  const runnable = flattenSteps(programme.steps);
 
   const ctx: SeanceContext = {
     webId,
     carnetContainerUrl: carnetUrls[0],
-    carnetTitre: carnet.titre,
-    modeleUrl: carnet.seanceModeleUrl ?? "",
+    carnetTitre: programme.titre,
+    protocolUrl: programme.protocolUrl ?? "",
+    legacy: programme.legacy,
   };
   const hasDraft = loadDraft(ctx.carnetContainerUrl) !== null;
 
@@ -160,17 +212,17 @@ async function renderApp(webId: string) {
                  <button id="resume-recap" class="ghost">Reprendre</button></p>`
             : ""
         }
-        <h1>${carnet.titre}</h1>
-        ${carnet.objectif ? `<p class="lead">${carnet.objectif}</p>` : ""}
-        ${carnet.frequence ? `<p class="meta">Fréquence: ${carnet.frequence}</p>` : ""}
+        <h1>${programme.titre}</h1>
+        ${programme.objectif ? `<p class="lead">${programme.objectif}</p>` : ""}
+        ${programme.cadence ? `<p class="meta">Fréquence: ${programme.cadence}</p>` : ""}
         ${
-          blocs.length
-            ? `<h2>${modele!.titre}</h2><ol class="blocs">${blocs.map(renderBloc).join("")}</ol>`
-            : `<p>Ce carnet n'a pas encore de modèle de séance chronométrable.</p>`
+          runnable.length
+            ? `<ol class="blocs">${runnable.map(renderRunnable).join("")}</ol>`
+            : `<p>Ce carnet n'a pas encore d'étapes exécutables.</p>`
         }
       </div>
       <div class="session-scroll" id="view-historique" hidden></div>
-      ${blocs.length ? renderTimerBar(blocs[0].dureeSecondes) : ""}
+      ${runnable.length ? renderTimerBar(runnable[0].seconds) : ""}
     </main>
   `;
 
@@ -184,7 +236,7 @@ async function renderApp(webId: string) {
   if (hasDraft) {
     document.querySelector<HTMLButtonElement>("#resume-recap")!.addEventListener("click", () => {
       // Le brouillon fournit le relevé ; l'enregistrement vide sert juste de base.
-      renderRecapView(blocs, ctx, {
+      renderRecapView(runnable, ctx, {
         startedAt: null,
         totalElapsedSeconds: 0,
         wallClockSeconds: 0,
@@ -193,9 +245,52 @@ async function renderApp(webId: string) {
     });
   }
 
-  if (blocs.length) {
-    wireTimer(blocs, ctx);
+  if (runnable.length) {
+    wireTimer(runnable, ctx);
   }
+}
+
+/** Ouverture d'un carnet à partir de l'adresse d'une recette. */
+function renderNewLogbookView(webId: string, podUrl: string) {
+  app.innerHTML = `
+    <main class="screen">
+      <p class="lead">Connecté en tant que <code>${webId}</code>.</p>
+      <p>Aucun carnet trouvé sous <code>${carnetsContainer(podUrl)}</code>.</p>
+      <form id="new-logbook">
+        <label for="recette">Adresse de la recette</label>
+        <input id="recette" name="recette" type="url" value="${RECETTE_EXEMPLE}" required />
+        <p class="meta">La recette est copiée dans ton carnet ; son adresse d'origine
+          est conservée comme provenance, sans lien vivant.</p>
+        <p class="error" id="new-error" hidden></p>
+        <button type="submit" id="new-submit">Ouvrir le carnet</button>
+      </form>
+      <button id="logout" class="ghost">Se déconnecter</button>
+    </main>
+  `;
+
+  document.querySelector<HTMLFormElement>("#new-logbook")!.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.querySelector<HTMLButtonElement>("#new-submit")!;
+    const errorEl = document.querySelector<HTMLParagraphElement>("#new-error")!;
+    const uri = document.querySelector<HTMLInputElement>("#recette")!.value.trim();
+    btn.disabled = true;
+    btn.textContent = "Création en cours…";
+    errorEl.hidden = true;
+    try {
+      await createLogbookFromProtocol(podUrl, uri);
+      await renderApp(webId);
+    } catch (err) {
+      errorEl.textContent = describePodError(err);
+      errorEl.hidden = false;
+      btn.disabled = false;
+      btn.textContent = "Ouvrir le carnet";
+    }
+  });
+
+  document.querySelector<HTMLButtonElement>("#logout")!.addEventListener("click", async () => {
+    await logout();
+    renderLoginView();
+  });
 }
 
 /**
@@ -251,7 +346,14 @@ function currentStreak(days: Set<string>): number {
 async function loadHistorique(container: HTMLElement, ctx: SeanceContext) {
   container.innerHTML = `<p class="lead">Lecture de l'historique…</p>`;
   try {
-    const urls = await listSeanceUrls(ctx.carnetContainerUrl);
+    // Les deux emplacements coexistent : `seances/` pour les carnets écrits
+    // avant les étapes typées, `sessions/` depuis. Le calendrier les fusionne
+    // pour que la continuité reste lisible d'un format à l'autre.
+    const [anciennes, nouvelles] = await Promise.all([
+      listSeanceUrls(ctx.carnetContainerUrl),
+      listTurtleUrls(sessionsContainer(ctx.carnetContainerUrl)),
+    ]);
+    const urls = [...anciennes, ...nouvelles];
     if (urls.length === 0) {
       container.innerHTML = `<p class="lead">Aucune séance enregistrée pour l'instant.</p>`;
       return;
@@ -347,33 +449,67 @@ function renderHistorique(
   });
 }
 
+/** Une séance lue, quel que soit le format dans lequel elle a été écrite. */
+interface SeanceLue {
+  date?: Date;
+  dureeSecondes: number;
+  ressenti?: string;
+  etapes: Array<{ titre: string; complete: boolean; dureeSecondes: number }>;
+}
+
+async function readSeanceQuelquesoitLeFormat(url: string): Promise<SeanceLue> {
+  if (url.includes("/sessions/")) {
+    const session = await readSession(url);
+    return {
+      date: session.startedAt,
+      dureeSecondes: session.durationSeconds,
+      ressenti: session.feeling,
+      etapes: session.runs.map((r) => ({
+        titre: r.title,
+        complete: r.completed,
+        dureeSecondes: r.durationSeconds,
+      })),
+    };
+  }
+  const seance = await readSeance(url);
+  return {
+    date: seance.dateRealisation,
+    dureeSecondes: seance.dureeReelleSecondes,
+    ressenti: seance.ressenti,
+    etapes: seance.blocs.map((b) => ({
+      titre: b.titre,
+      complete: b.complete,
+      dureeSecondes: b.dureeReelleSecondes,
+    })),
+  };
+}
+
 /** Un jour peut porter plusieurs séances : on les affiche toutes, dans l'ordre. */
 async function showSeanceDetail(urls: string[]) {
   const panel = document.querySelector<HTMLElement>("#seance-detail")!;
   panel.innerHTML = `<p class="lead">Lecture…</p>`;
   try {
-    const seances = await Promise.all(urls.map(readSeance));
+    const seances = await Promise.all(urls.map(readSeanceQuelquesoitLeFormat));
     // Les noms de fichiers ne se trient pas chronologiquement (`<date>.ttl`
     // passe après `<date>-HHMMSS.ttl`) : on trie sur l'heure réelle.
-    seances.sort((a, b) => (a.dateRealisation?.getTime() ?? 0) - (b.dateRealisation?.getTime() ?? 0));
+    seances.sort((a, b) => (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0));
 
     panel.innerHTML = seances
       .map((seance) => {
-        const date = seance.dateRealisation;
-        const titre = date
-          ? date.toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" })
+        const titre = seance.date
+          ? seance.date.toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" })
           : "Séance";
         return `
         <section class="detail">
           <h3>${titre}</h3>
-          <p class="meta">Durée réelle : ${formatSeconds(seance.dureeReelleSecondes)}</p>
+          <p class="meta">Durée réelle : ${formatSeconds(seance.dureeSecondes)}</p>
           <ul class="detail-blocs">
-            ${seance.blocs
+            ${seance.etapes
               .map(
-                (b) => `<li class="${b.complete ? "is-done" : "is-skipped"}">
-                  <span>${b.complete ? "✓" : "✗"}</span>
-                  <span>${b.titre}</span>
-                  <span class="meta">${formatSeconds(b.dureeReelleSecondes)}</span>
+                (e) => `<li class="${e.complete ? "is-done" : "is-skipped"}">
+                  <span>${e.complete ? "✓" : "✗"}</span>
+                  <span>${e.titre}</span>
+                  <span class="meta">${formatSeconds(e.dureeSecondes)}</span>
                 </li>`
               )
               .join("")}
@@ -391,19 +527,20 @@ interface SeanceContext {
   webId: string;
   carnetContainerUrl: string;
   carnetTitre: string;
-  modeleUrl: string;
+  protocolUrl: string;
+  /** Carnet écrit avant les étapes typées : la séance s'écrit dans `seances/`. */
+  legacy: boolean;
 }
 
-function renderBloc(bloc: Bloc, index: number): string {
-  const exercices = bloc.exercices.length
-    ? `<ul>${bloc.exercices
-        .map((ex) => `<li>${ex.titre}${ex.repetitions ? ` — ${ex.repetitions}` : ""}</li>`)
-        .join("")}</ul>`
-    : "";
+function renderRunnable(step: RunnableStep, index: number): string {
+  // Une étape non chronométrée affiche son objectif (10 squats) plutôt qu'un
+  // temps : c'est l'usager qui la valide, pas l'horloge.
+  const objectif = step.seconds > 0 ? formatSeconds(step.seconds) : describeStep(step.sourceStep);
+  const note = step.sourceStep.note ? `<p class="meta">${step.sourceStep.note}</p>` : "";
   return `
     <li class="bloc" data-index="${index}">
-      <strong>${bloc.titre}</strong> <span class="meta">${formatSeconds(bloc.dureeSecondes)}</span>
-      ${exercices}
+      <strong>${step.label}</strong> <span class="meta">${objectif}</span>
+      ${note}
     </li>`;
 }
 
@@ -429,8 +566,8 @@ function renderTimerBar(firstDuration: number): string {
 /** Nombre de blocs suivants gardés visibles sur petit écran, en plus du bloc courant. */
 const LOOKAHEAD = 2;
 
-function wireTimer(blocs: Bloc[], ctx: SeanceContext) {
-  const timer = new SequenceTimer(blocs.map((b) => ({ label: b.titre, seconds: b.dureeSecondes })));
+function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
+  const timer = new SequenceTimer(steps.map((s) => ({ label: s.label, seconds: s.seconds })));
   const label = document.querySelector<HTMLSpanElement>("#timer-label")!;
   const remaining = document.querySelector<HTMLSpanElement>("#timer-remaining")!;
   const toggleBtn = document.querySelector<HTMLButtonElement>("#timer-toggle")!;
@@ -448,7 +585,7 @@ function wireTimer(blocs: Bloc[], ctx: SeanceContext) {
     recapOpened = true;
     timer.pause();
     void wakeLock.release();
-    renderRecapView(blocs, ctx, timer.getRecord());
+    renderRecapView(steps, ctx, timer.getRecord());
   };
 
   // Le navigateur throttle les timers d'un onglet caché et relâche le verrou
@@ -469,12 +606,18 @@ function wireTimer(blocs: Bloc[], ctx: SeanceContext) {
     } else if (state.awaitingReady) {
       label.textContent = `Prêt pour : ${state.step?.label ?? ""} ?`;
       toggleBtn.textContent = "Je suis prêt";
+    } else if (!state.timed && state.running) {
+      // Étape comptée ou checklist : rien à décompter, c'est l'usager qui clôt.
+      label.textContent = state.step?.label ?? "Prêt";
+      toggleBtn.textContent = "C'est fait";
     } else {
       label.textContent = state.step?.label ?? "Prêt";
       toggleBtn.textContent = state.running ? "Pause" : "Démarrer";
     }
 
-    remaining.textContent = formatSeconds(state.remaining);
+    const objectif = steps[state.stepIndex]?.sourceStep;
+    remaining.textContent =
+      !state.done && !state.timed && objectif ? describeStep(objectif) : formatSeconds(state.remaining);
     toggleBtn.disabled = state.done;
     skipBtn.disabled = state.done;
     timerSection.classList.toggle("is-awaiting", state.awaitingReady);
@@ -492,7 +635,10 @@ function wireTimer(blocs: Bloc[], ctx: SeanceContext) {
   timer.subscribe(render);
 
   toggleBtn.addEventListener("click", () => {
-    if (timer.getSnapshot().running) {
+    const state = timer.getSnapshot();
+    if (state.running && !state.timed) {
+      timer.complete();
+    } else if (state.running) {
       timer.pause();
       void wakeLock.release();
     } else {
@@ -510,7 +656,7 @@ function wireTimer(blocs: Bloc[], ctx: SeanceContext) {
 }
 
 interface RecapRow {
-  bloc: Bloc;
+  step: RunnableStep;
   complete: boolean;
   dureeSecondes: number;
 }
@@ -570,17 +716,17 @@ function clearDraft(carnetContainerUrl: string): void {
  * sans l'app, puis loguée après coup), on part du programme prévu plutôt que
  * d'un relevé vide.
  */
-function toRecapRows(blocs: Bloc[], record: SessionRecord): RecapRow[] {
+function toRecapRows(steps: RunnableStep[], record: SessionRecord): RecapRow[] {
   const neverRan = record.startedAt === null;
-  return blocs.map((bloc, i) => ({
-    bloc,
+  return steps.map((step, i) => ({
+    step,
     complete: neverRan ? true : record.steps[i]?.completed ?? false,
-    dureeSecondes: neverRan ? bloc.dureeSecondes : record.steps[i]?.elapsedSeconds ?? 0,
+    dureeSecondes: neverRan ? step.seconds : record.steps[i]?.elapsedSeconds ?? 0,
   }));
 }
 
-function renderRecapView(blocs: Bloc[], ctx: SeanceContext, record: SessionRecord) {
-  const rows = toRecapRows(blocs, record);
+function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: SessionRecord) {
+  const rows = toRecapRows(steps, record);
 
   // Une séance déjà saisie mais jamais écrite reprend la main sur le relevé.
   const draft = loadDraft(ctx.carnetContainerUrl);
@@ -609,13 +755,13 @@ function renderRecapView(blocs: Bloc[], ctx: SeanceContext, record: SessionRecor
       ${restored ? `<p class="meta">Séance non enregistrée, restaurée depuis ce navigateur.</p>` : ""}
       <form id="recap-form">
         <fieldset class="recap-blocs">
-          <legend>Blocs réalisés</legend>
+          <legend>Étapes réalisées</legend>
           ${rows
             .map(
               (r, i) => `
             <label class="recap-bloc">
               <input type="checkbox" name="bloc" value="${i}" ${r.complete ? "checked" : ""} />
-              <span>${r.bloc.titre}</span>
+              <span>${r.step.label}</span>
               <span class="meta">${formatSeconds(r.dureeSecondes)}</span>
             </label>`
             )
@@ -673,18 +819,36 @@ function renderRecapView(blocs: Bloc[], ctx: SeanceContext, record: SessionRecor
     saveBtn.textContent = "Enregistrement…";
     errorEl.hidden = true;
     try {
-      await logSeance(ctx.carnetContainerUrl, {
-        modeleUrl: ctx.modeleUrl,
-        dateRealisation: startedAt ?? new Date(),
-        dureeReelleSecondes: Math.max(0, Math.round(m * 60)),
-        ressenti: ressenti || undefined,
-        blocs: rows.map((r, i) => ({
-          blocUrl: r.bloc.url,
-          titre: r.bloc.titre,
-          complete: complete[i],
-          dureeReelleSecondes: r.dureeSecondes,
-        })),
-      });
+      const duree = Math.max(0, Math.round(m * 60));
+      if (ctx.legacy) {
+        // Carnet d'avant les étapes typées : on continue d'écrire dans son
+        // propre format plutôt que de mélanger deux vocabulaires dans un carnet.
+        await logSeance(ctx.carnetContainerUrl, {
+          modeleUrl: ctx.protocolUrl,
+          dateRealisation: startedAt ?? new Date(),
+          dureeReelleSecondes: duree,
+          ressenti: ressenti || undefined,
+          blocs: rows.map((r, i) => ({
+            blocUrl: r.step.sourceStep.url,
+            titre: r.step.label,
+            complete: complete[i],
+            dureeReelleSecondes: r.dureeSecondes,
+          })),
+        });
+      } else {
+        await logSession(ctx.carnetContainerUrl, {
+          protocolUrl: ctx.protocolUrl || undefined,
+          startedAt: startedAt ?? new Date(),
+          durationSeconds: duree,
+          feeling: ressenti || undefined,
+          runs: rows.map((r, i) => ({
+            ofStepUrl: r.step.sourceStep.url,
+            title: r.step.label,
+            completed: complete[i],
+            durationSeconds: r.dureeSecondes,
+          })),
+        });
+      }
       clearDraft(ctx.carnetContainerUrl);
       await renderApp(ctx.webId);
     } catch (err) {

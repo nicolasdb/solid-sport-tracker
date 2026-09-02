@@ -59,9 +59,12 @@ nouveau build, sans redémarrer le conteneur.
   une séance et reprend le verrou au retour en premier plan.
 - `src/vocab/carnet.ts` — prédicats du vocabulaire `st:` + types TS
   correspondants.
-- `src/lib/example-programme.ts` — le programme "Échauffement quotidien"
-  (semaine 1) encodé en `NewCarnet`, utilisé pour tester l'écriture de bout
-  en bout.
+- `src/vocab/protocol.ts` — vocabulaire `act:` (recette → carnet → session),
+  étapes typées et dépliage d'un protocole en séquence exécutable.
+- `src/lib/protocol-pod.ts` — chargement d'une recette par URI, copie dans le
+  carnet avec provenance, écriture et relecture des séances.
+- `public/recipes/echauffement.ttl` — la recette d'exemple, en Turtle,
+  chargée par son adresse et non importée depuis le code.
 - `docs/data-model.md` — schéma complet en Turtle, layout des containers sur
   le pod, exemple concret basé sur un vrai programme.
 
@@ -106,7 +109,25 @@ nouveau build, sans redémarrer le conteneur.
   d'affilée et calendrier mensuel des séances, un jour cliquable ouvrant le
   détail (blocs faits/passés, durée, ressenti). Lecture en paliers — le
   calendrier ne coûte qu'un listing de container, le détail n'est chargé
-  qu'à la demande.
+  qu'à la demande. Les deux emplacements de séances (`seances/` avant les
+  étapes typées, `sessions/` depuis) sont fusionnés dans le même calendrier.
+- ✅ Vocabulaire généralisé `act:` — **recette → carnet → session** — et
+  étapes typées : durée-cible, compte-cible (10 squats), intervalle
+  (métronome, phases explicites pour les ratios asymétriques), checklist sans
+  mesure, et imbrication réelle avec `act:RepeatStep` : `3× [10 squats,
+  10 fentes, 10 push-ups]` n'est pas `3×10 squats`. Le minuteur déplie ce
+  protocole en séquence exécutable ; une étape non chronométrée est validée
+  d'un tap au lieu d'attendre une horloge.
+- ✅ Chargement d'une recette par **URI arbitraire**, **copiée** dans le
+  carnet à sa création avec l'adresse d'origine comme simple provenance. Pas
+  de lien vivant : une v2 est une autre recette, le carnet reste comparable à
+  lui-même. La recette d'exemple est un fichier Turtle versionné
+  (`public/recipes/echauffement.ttl`), chargée par son adresse — le chemin de
+  découverte est exercé pour de vrai, pas simulé par un import.
+- ✅ Les carnets écrits avant les étapes typées restent lisibles et
+  utilisables : ils sont convertis à la lecture, et leurs séances continuent
+  de s'écrire dans leur propre format. Pas de migration.
+
 ### Le cap
 
 Le tracker sert à exercer le vocabulaire **recette → carnet → session** sur de
@@ -119,15 +140,10 @@ de carnets et les étapes typées — pas l'analyse.
   vue d'ensemble de la continuité et vérification qu'une séance a bien été
   écrite sur le pod sans changer d'app.
 
-- ⏳ Vocabulaire généralisé et **étapes typées** — durée-cible, compte-cible
-  (10 squats), intervalle (métronome, ratios asymétriques), checklist sans
-  mesure — avec imbrication réelle : `3× [10 squats, 10 fentes, 10 push-ups]`
-  n'est pas `3×10 squats`. Aujourd'hui un bloc n'a qu'une durée, et les
-  comptes sont du texte libre non exploitable.
-- ⏳ Chargement d'une recette par **URI arbitraire** (pas seulement le pod
-  local), **copiée** dans le carnet à la création avec l'URI d'origine comme
-  provenance. Pas de lien vivant : une v2 est une autre recette, le carnet
-  reste comparable à lui-même.
+- ⏳ Choix parmi plusieurs carnets, et déblocage d'un stage suivant d'une
+  recette multi-stages.
+- ⏳ Signal de fin de phase (son, vibration) pour les intervalles : un
+  métronome qu'il faut regarder ne sert à rien.
 - ⏳ Skill d'écriture de recettes : du langage naturel vers une recette
   valide, hors de l'app (le tracker reste bête et sans dépendance à un
   modèle). L'humain valide un résumé lisible, jamais du Turtle.
