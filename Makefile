@@ -31,11 +31,13 @@ dev: ## Serveur de dev Vite (--host pour tester depuis un mobile du réseau)
 build: ## Typecheck + build de production dans dist/
 	npm run build
 
+# Ne produit aucun fichier : c'est le seul contrôle sûr quand npm tourne dans
+# un conteneur qui n'écrit pas avec ton uid (voir CLAUDE.md).
 check: ## Typecheck seul, sans produire de build
-	npx tsc --noEmit
+	npm run check
 
 clean: ## Supprime dist/
-	rm -rf dist
+	rm -rf dist || podman unshare rm -rf dist
 
 # ── VPS ──────────────────────────────────────────────────────────────────────
 # Toutes ces cibles s'exécutent depuis le poste local, via SSH.

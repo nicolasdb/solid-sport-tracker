@@ -28,6 +28,15 @@ exec -w "$PWD" ...`) — otherwise `npm run <script>` fails with "Missing script
 because it resolves `package.json` from the container's root instead of the
 mounted repo path.
 
+**Do not run `npm run build` from that wrapped npm.** Rootless podman maps the
+container user to a subuid (524288 here), so everything vite writes into
+`dist/` ends up owned by an id the host user cannot unlink. The next build from
+a normal shell then dies on `EACCES: permission denied, rmdir '…/dist/assets'`,
+and `rm -rf dist` cannot clean it either — only `podman unshare rm -rf dist`
+can, which is what `make clean` falls back to. Use `npm run check` (`tsc
+--noEmit`, writes nothing) to verify code from the wrapped environment, and
+leave `make vps-push` to produce the build from the user's own shell.
+
 ## Deployment
 
 `make` (no target) prints the help, generated from `## ` comments on target
