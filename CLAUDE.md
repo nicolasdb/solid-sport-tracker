@@ -89,6 +89,17 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   `getRecord()` returns what actually happened (start time, per-block elapsed
   and completed/skipped) — the session log is a byproduct of running the timer,
   not separate data entry.
+  **Time is measured as `Date.now()` deltas, never by counting ticks.** Android
+  throttles a backgrounded tab's `setInterval` to ~1/min and freezes it after a
+  few minutes: a tick-counting timer silently under-reported real durations by
+  more than half. The interval only drives repainting; `resync()` recomputes
+  from the clock and is called on `visibilitychange`. `wallClockSeconds` (whole
+  session, pauses included) is what gets logged as the session duration, so a
+  séance is measured even when few steps are timed.
+- `src/lib/wake-lock.ts` — `ScreenWakeLock`, keeps the screen on during a
+  session. The browser drops the lock whenever the page is hidden, hence
+  `reacquire()` on `visibilitychange`; unsupported (Firefox mobile, insecure
+  contexts) degrades silently rather than erroring.
 - `src/lib/example-programme.ts` — a hand-written `NewCarnet` ("Échauffement
   quotidien", week 1) used to exercise the full write path (`createCarnet`)
   end-to-end without needing an LLM-assisted import pipeline (not yet built).

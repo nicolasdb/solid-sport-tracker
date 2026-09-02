@@ -53,7 +53,10 @@ nouveau build, sans redémarrer le conteneur.
   trouvée via `pim:storage`, avec repli sur la remontée par en-têtes
   `Link: <pim:Storage>; rel="type"` (voir ci-dessous).
 - `src/lib/timer.ts` — minuteur séquentiel, enchaîne les blocs d'une séance
-  (`SequenceTimer`), indépendant du reste pour rester testable seul.
+  (`SequenceTimer`), indépendant du reste pour rester testable seul. Mesure
+  le temps en deltas d'horloge, pas en comptant les ticks.
+- `src/lib/wake-lock.ts` — `ScreenWakeLock`, garde l'écran allumé pendant
+  une séance et reprend le verrou au retour en premier plan.
 - `src/vocab/carnet.ts` — prédicats du vocabulaire `st:` + types TS
   correspondants.
 - `src/lib/example-programme.ts` — le programme "Échauffement quotidien"
@@ -70,6 +73,15 @@ nouveau build, sans redémarrer le conteneur.
 - ✅ Timer séquentiel sur les blocs de la séance (démarrer/pause/passer/
   réinitialiser). En fin de bloc il n'enchaîne pas tout seul : il arme le
   bloc suivant et attend le feu vert, pour laisser souffler.
+- ✅ Minuteur fiable écran éteint : le temps est mesuré en deltas
+  `Date.now()`, jamais en comptant les ticks — un onglet en arrière-plan est
+  throttlé voire gelé par Android, et l'ancien décompte par ticks
+  sous-estimait fortement les durées. Le retour en premier plan
+  (`visibilitychange`) recale l'état. L'écran est maintenu allumé pendant la
+  séance (Wake Lock API, dégradation silencieuse là où elle manque).
+- ✅ Durée de séance enregistrée dans tous les cas : c'est la durée murale
+  depuis le premier démarrage (pauses et transitions comprises), pas la somme
+  des blocs chronométrés.
 - ✅ UI pensée mobile : colonne pleine hauteur en `dvh`, minuteur ancré en
   bas avec marges `env(safe-area-inset-*)` pour ne pas passer sous les
   barres du navigateur, et programme réduit au bloc courant + 2 suivants
@@ -95,17 +107,33 @@ nouveau build, sans redémarrer le conteneur.
   détail (blocs faits/passés, durée, ressenti). Lecture en paliers — le
   calendrier ne coûte qu'un listing de container, le détail n'est chargé
   qu'à la demande.
-- ⏳ Statistiques d'assiduité par bloc (« je saute la mobilité 40 % du
-  temps ») — nécessite d'agréger plusieurs séances, prévu côté client sur
-  une fenêtre glissante.
+### Le cap
+
+Le tracker sert à exercer le vocabulaire **recette → carnet → session** sur de
+vraies recettes : c'est ce vocabulaire dont dépend le reste (voir
+`docs/todo-tracker-kit-dashboard.md`). Le focus est donc l'UX/UI, la création
+de carnets et les étapes typées — pas l'analyse.
+
+- **Hors périmètre, explicitement** : les statistiques et l'analyse
+  d'assiduité partent au dashboard. L'historique calendrier reste, mais comme
+  vue d'ensemble de la continuité et vérification qu'une séance a bien été
+  écrite sur le pod sans changer d'app.
+
+- ⏳ Vocabulaire généralisé et **étapes typées** — durée-cible, compte-cible
+  (10 squats), intervalle (métronome, ratios asymétriques), checklist sans
+  mesure — avec imbrication réelle : `3× [10 squats, 10 fentes, 10 push-ups]`
+  n'est pas `3×10 squats`. Aujourd'hui un bloc n'a qu'une durée, et les
+  comptes sont du texte libre non exploitable.
+- ⏳ Chargement d'une recette par **URI arbitraire** (pas seulement le pod
+  local), **copiée** dans le carnet à la création avec l'URI d'origine comme
+  provenance. Pas de lien vivant : une v2 est une autre recette, le carnet
+  reste comparable à lui-même.
+- ⏳ Skill d'écriture de recettes : du langage naturel vers une recette
+  valide, hors de l'app (le tracker reste bête et sans dépendance à un
+  modèle). L'humain valide un résumé lisible, jamais du Turtle.
 - ⏳ UI vraiment "dynamique selon les préférences" — aujourd'hui l'app
   affiche juste le premier carnet trouvé; le choix du carnet actif via
   `st:carnetActif` (préférences) reste à brancher.
-- ⏳ Extraction d'un programme texte (comme celui de la semaine 1) vers la
-  structure RDF `st:SeanceModele`/`st:Bloc`/`st:Exercice` — à faire en
-  assisté (LLM + validation avant écriture), pas en automatique pur. En
-  attendant, `src/lib/example-programme.ts` sert de cas de test écrit à la
-  main pour valider le chemin d'écriture de bout en bout.
 
 ## Prérequis sur le pod
 

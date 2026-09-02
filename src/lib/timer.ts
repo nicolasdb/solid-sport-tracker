@@ -27,40 +27,62 @@ export interface SessionRecord {
   /** Premier démarrage, ou null si le minuteur n'a jamais tourné. */
   startedAt: Date | null;
   totalElapsedSeconds: number;
+  /**
+   * Durée murale depuis le premier démarrage, pauses et temps d'attente
+   * inclus — la durée de séance qu'on enregistre même quand peu d'étapes
+   * sont chronométrées.
+   */
+  wallClockSeconds: number;
   steps: StepRecord[];
 }
 
 type TimerListener = (state: TimerState) => void;
 
-/** Minuteur séquentiel : enchaîne une liste d'étapes chronométrées (les blocs d'une séance). */
+/**
+ * Minuteur séquentiel : enchaîne une liste d'étapes chronométrées (les blocs
+ * d'une séance).
+ *
+ * Le temps est mesuré en deltas d'horloge (`Date.now()`), jamais en comptant
+ * les ticks : sur mobile, le navigateur throttle voire gèle les `setInterval`
+ * d'un onglet en arrière-plan, et un décompte par ticks sous-estime alors
+ * massivement la durée réelle. L'interval ne sert qu'à rafraîchir l'affichage ;
+ * `resync()` permet de recaler l'état immédiatement au retour en foreground.
+ */
 export class SequenceTimer {
   private steps: TimerStep[];
   private stepIndex = 0;
-  private remaining: number;
   private running = false;
   private awaitingReady = false;
   private intervalId: number | undefined;
   private listeners = new Set<TimerListener>();
-  private elapsed: number[];
+  /** Temps couru accumulé par étape, en ms (hors période de course en cours). */
+  private elapsedMs: number[];
   private completed: boolean[];
   private startedAt: Date | null = null;
+  /** Horodatage du dernier (re)démarrage de l'étape courante, null à l'arrêt. */
+  private stepStartedAt: number | null = null;
 
   constructor(steps: TimerStep[]) {
     this.steps = steps.filter((s) => s.seconds > 0);
-    this.remaining = this.steps[0]?.seconds ?? 0;
-    this.elapsed = this.steps.map(() => 0);
+    this.elapsedMs = this.steps.map(() => 0);
     this.completed = this.steps.map(() => false);
   }
 
   /** Ce qui s'est réellement passé, pour alimenter l'écran de récapitulatif. */
   getRecord(): SessionRecord {
+    this.foldElapsed();
     return {
       startedAt: this.startedAt,
-      totalElapsedSeconds: this.elapsed.reduce((sum, n) => sum + n, 0),
+      totalElapsedSeconds: Math.round(
+        this.elapsedMs.reduce((sum, n) => sum + n, 0) / 1000
+      ),
+      wallClockSeconds: this.startedAt
+        ? Math.round((Date.now() - this.startedAt.getTime()) / 1000)
+        : 0,
       steps: this.steps.map((step, i) => ({
         label: step.label,
         plannedSeconds: step.seconds,
-        elapsedSeconds: this.elapsed[i],
+        elapsedSeconds: Math.round(this.elapsedMs[i] / 1000),
         completed: this.completed[i],
       })),
     };
@@ -83,7 +105,8 @@ export class SequenceTimer {
     this.awaitingReady = false;
     this.running = true;
     this.startedAt ??= new Date();
-    this.intervalId = window.setInterval(() => this.tick(), 1000);
+    this.stepStartedAt = Date.now();
+    this.intervalId = window.setInterval(() => this.resync(), 250);
     this.emit();
   }
 
@@ -92,9 +115,42 @@ export class SequenceTimer {
     this.emit();
   }
 
+  /**
+   * Recale l'état sur l'horloge et notifie. À appeler au retour en foreground
+   * (`visibilitychange`) : si le temps du bloc s'est écoulé pendant l'absence,
+   * le bloc se termine ici.
+   */
+  resync(): void {
+    if (!this.running) return;
+    this.foldElapsed();
+    if (this.remainingSeconds() <= 0) {
+      this.advance(true);
+      return;
+    }
+    this.emit();
+  }
+
   private stopTicking(): void {
+    this.foldElapsed();
     this.running = false;
+    this.stepStartedAt = null;
     window.clearInterval(this.intervalId);
+  }
+
+  /** Verse la période de course en cours dans l'accumulateur de l'étape. */
+  private foldElapsed(): void {
+    if (this.stepStartedAt === null || this.stepIndex >= this.steps.length) return;
+    const now = Date.now();
+    this.elapsedMs[this.stepIndex] += now - this.stepStartedAt;
+    this.stepStartedAt = now;
+  }
+
+  private remainingSeconds(): number {
+    if (this.stepIndex >= this.steps.length) return 0;
+    const planned = this.steps[this.stepIndex].seconds * 1000;
+    let elapsed = this.elapsedMs[this.stepIndex];
+    if (this.stepStartedAt !== null) elapsed += Date.now() - this.stepStartedAt;
+    return Math.max(0, Math.ceil((planned - elapsed) / 1000));
   }
 
   /** Passe l'étape courante : elle est enregistrée comme non terminée. */
@@ -106,20 +162,9 @@ export class SequenceTimer {
     this.pause();
     this.awaitingReady = false;
     this.stepIndex = 0;
-    this.remaining = this.steps[0]?.seconds ?? 0;
-    this.elapsed = this.steps.map(() => 0);
+    this.elapsedMs = this.steps.map(() => 0);
     this.completed = this.steps.map(() => false);
     this.startedAt = null;
-    this.emit();
-  }
-
-  private tick(): void {
-    this.remaining -= 1;
-    this.elapsed[this.stepIndex] += 1;
-    if (this.remaining <= 0) {
-      this.advance(true);
-      return;
-    }
     this.emit();
   }
 
@@ -138,7 +183,6 @@ export class SequenceTimer {
       this.emit();
       return;
     }
-    this.remaining = this.steps[this.stepIndex].seconds;
     this.awaitingReady = true;
     this.emit();
   }
@@ -148,7 +192,7 @@ export class SequenceTimer {
     return {
       stepIndex: this.stepIndex,
       step: done ? null : this.steps[this.stepIndex],
-      remaining: this.remaining,
+      remaining: this.remainingSeconds(),
       running: this.running,
       done,
       awaitingReady: this.awaitingReady,

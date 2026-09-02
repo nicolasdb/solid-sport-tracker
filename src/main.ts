@@ -22,6 +22,7 @@ import {
   type SessionRecord,
   type TimerState,
 } from "./lib/timer";
+import { ScreenWakeLock } from "./lib/wake-lock";
 import type { Bloc } from "./vocab/carnet";
 
 const DEFAULT_IDENTIFIER = "https://pod.nicolasdb.eu/";
@@ -183,7 +184,12 @@ async function renderApp(webId: string) {
   if (hasDraft) {
     document.querySelector<HTMLButtonElement>("#resume-recap")!.addEventListener("click", () => {
       // Le brouillon fournit le relevé ; l'enregistrement vide sert juste de base.
-      renderRecapView(blocs, ctx, { startedAt: null, totalElapsedSeconds: 0, steps: [] });
+      renderRecapView(blocs, ctx, {
+        startedAt: null,
+        totalElapsedSeconds: 0,
+        wallClockSeconds: 0,
+        steps: [],
+      });
     });
   }
 
@@ -434,13 +440,25 @@ function wireTimer(blocs: Bloc[], ctx: SeanceContext) {
   const timerSection = document.querySelector<HTMLElement>("#timer")!;
   const blocItems = Array.from(document.querySelectorAll<HTMLLIElement>("li.bloc"));
 
+  const wakeLock = new ScreenWakeLock();
+
   let recapOpened = false;
   const openRecap = () => {
     if (recapOpened) return;
     recapOpened = true;
     timer.pause();
+    void wakeLock.release();
     renderRecapView(blocs, ctx, timer.getRecord());
   };
+
+  // Le navigateur throttle les timers d'un onglet caché et relâche le verrou
+  // d'écran : au retour, on recale le décompte sur l'horloge et on reprend
+  // le verrou.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    timer.resync();
+    void wakeLock.reacquire();
+  });
 
   const render = (state: TimerState) => {
     if (state.done) {
@@ -474,13 +492,19 @@ function wireTimer(blocs: Bloc[], ctx: SeanceContext) {
   timer.subscribe(render);
 
   toggleBtn.addEventListener("click", () => {
-    if (timer.getSnapshot().running) timer.pause();
-    else timer.start();
+    if (timer.getSnapshot().running) {
+      timer.pause();
+      void wakeLock.release();
+    } else {
+      timer.start();
+      void wakeLock.acquire();
+    }
   });
   skipBtn.addEventListener("click", () => timer.skip());
   resetBtn.addEventListener("click", () => {
     recapOpened = false;
     timer.reset();
+    void wakeLock.release();
   });
   finishBtn.addEventListener("click", openRecap);
 }
@@ -569,8 +593,13 @@ function renderRecapView(blocs: Bloc[], ctx: SeanceContext, record: SessionRecor
   }
 
   const startedAt = restored && draft!.startedAt ? new Date(draft!.startedAt) : record.startedAt;
-  const totalSeconds = rows.reduce((sum, r) => sum + r.dureeSecondes, 0);
-  const minutes = restored ? draft!.minutes : Math.round(totalSeconds / 60);
+  // La durée de séance est la durée murale du minuteur (pauses et transitions
+  // comprises), pas la somme des blocs chronométrés : une séance reste
+  // mesurée même quand peu d'étapes le sont. Sans minuteur, on retombe sur
+  // le programme prévu.
+  const plannedSeconds = rows.reduce((sum, r) => sum + r.dureeSecondes, 0);
+  const sessionSeconds = record.startedAt ? record.wallClockSeconds : plannedSeconds;
+  const minutes = restored ? draft!.minutes : Math.round(sessionSeconds / 60);
   const ressentiValue = restored ? draft!.ressenti : "";
 
   app.innerHTML = `
