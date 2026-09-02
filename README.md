@@ -102,10 +102,10 @@ nouveau build, sans redémarrer le conteneur.
   bas avec marges `env(safe-area-inset-*)` pour ne pas passer sous les
   barres du navigateur, et programme réduit au bloc courant + 2 suivants
   sur petit écran.
-- ✅ Écriture sur le pod : `ensureTrackerScaffold` crée `/sport-tracker/`,
-  `/sport-tracker/carnets/` et `preferences.ttl` s'ils n'existent pas encore
-  (appelé automatiquement au login) ; `createCarnet` écrit un carnet complet
-  (container + `carnet.ttl` + `modele.ttl`). Rien n'écrit d'ACL — les
+- ✅ **Se connecter n'écrit rien.** Un pod sur lequel le tracker n'a jamais
+  servi reste intact tant que tu n'as pas ouvert un carnet : c'est cette
+  action-là qui crée `/sport-tracker/` et `/sport-tracker/carnets/`, et
+  l'écran de création annonce ce qu'elle va écrire. Rien n'écrit d'ACL — les
   ressources créées héritent du contrôle d'accès du container parent le plus
   proche, privé par défaut sur un pod perso.
 - ✅ Logger une séance réalisée (`st:SeanceInstance` + `st:BlocRealise`).
@@ -183,7 +183,13 @@ un CSS multi-pods annonce aussi sa racine serveur, qui n'est pas le pod de
 l'usager. Aucune saisie manuelle n'est donc nécessaire sur un serveur
 conforme.
 
-Rien d'autre n'est requis à l'avance : au premier login, l'app crée
-`/sport-tracker/`, `/sport-tracker/carnets/` et `preferences.ttl` s'ils
-n'existent pas, et propose de créer le carnet d'exemple si aucun carnet
-n'est trouvé. Voir `docs/data-model.md` pour la structure exacte.
+Rien d'autre n'est requis à l'avance, et rien n'est écrit avant que tu le
+demandes : sur un pod vierge l'app propose l'adresse d'une recette, et c'est
+l'ouverture du carnet qui crée `/sport-tracker/` et `/sport-tracker/carnets/`.
+Voir `docs/data-model.md` pour la structure exacte.
+
+Le WebID utilisé doit **posséder** un storage. Une identité d'agent qui vit
+dans le pod de quelqu'un d'autre n'a de droits que sur les containers qu'on
+lui a accordés : la découverte de racine la renvoie vers le pod hôte, et le
+serveur répond 403 à la racine. Identité et stockage sont découplés dans
+Solid — un WebID d'agent n'est pas un alias sur le pod qui l'héberge.

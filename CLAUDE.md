@@ -78,12 +78,17 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   `getDefaultSession`) and re-exports its authenticated `fetch` for use by `pod.ts`.
 - `src/lib/pod.ts` — all reads/writes to the pod, via `@inrupt/solid-client`.
   Key entry points: `getPrimaryPodUrl` (two-tier pod-root discovery, see below),
-  `ensureTrackerScaffold` (idempotent: creates `/sport-tracker/`,
-  `/sport-tracker/carnets/`, `preferences.ttl` if missing — called on every
-  login), `listCarnetUrls`/`readCarnet`/`readSeanceModele`/`readPreferences` for
-  reading, `createCarnet` for writing a full carnet (container + `carnet.ttl` +
-  `modele.ttl`) in one call. No ACL handling anywhere — new resources inherit
-  access control from the nearest parent container.
+  `ensureTrackerScaffold` (idempotent: creates `/sport-tracker/` and
+  `/sport-tracker/carnets/`), `listCarnetUrls`/`readCarnet`/`readSeanceModele`/
+  `readPreferences` for reading. No ACL handling anywhere — new resources
+  inherit access control from the nearest parent container.
+  **Logging in writes nothing.** The scaffold is created only from an explicit
+  user action (opening a carnet), never on login: connecting to a pod must
+  leave it exactly as it was, and the create screen states what it will write.
+  `preferences.ttl` is deliberately not part of the scaffold — `readPreferences`
+  works without it, and an empty preferences document has no reason to exist
+  before a preference is set. `listCarnetUrls` therefore treats a missing
+  container as "no carnets", not as an error.
 - `src/vocab/protocol.ts` — the `act:` vocabulary and the TS types behind it:
   `Protocol` (recipe) → `Logbook` (one person's engagement in it) → `Session`
   (one run), plus the typed steps (`TimedStep`, `CountedStep`, `IntervalStep`,
@@ -205,10 +210,10 @@ The session view is built mobile-first and there are a few things not to undo:
   `LOOKAHEAD` (2) upcoming ones. `wireTimer` sets `is-current`/`is-past`/`is-far`
   on each `li.bloc` and CSS hides the latter two.
 
-`renderApp` filters out blocks with `dureeSecondes === 0` before both rendering
-and constructing the timer. `SequenceTimer` filters those internally too, so
-filtering in one place only would desynchronize the list indices from the
-timer's `stepIndex`, and the wrong block would be highlighted.
+The programme list and the timer are both built from the same `flattenSteps`
+output, in the same order. Any filtering or expansion must happen there and
+nowhere else: doing it in one place only would desynchronize the list indices
+from the timer's `stepIndex`, and the wrong step would be highlighted.
 
 ### Pod-root discovery
 
@@ -230,6 +235,17 @@ yields the server root instead of the user's pod — wrong, and not writable.
 Do not fall back to deriving the pod root by string-parsing the WebID URL: it
 happens to work for CSS's `/<user>/profile/card` layout but has no spec basis,
 since identity and storage are deliberately decoupled in Solid.
+
+**The app currently assumes the discovered storage root is writable, and that
+assumption breaks for any identity that does not own a pod.** An agent WebID
+hosted inside someone's pod (`…/nicolas_claude/agents/agent-pink2#me`) resolves
+to that person's storage, where it holds no rights: the server answers 403 at
+the root even though the session is perfectly valid. Such an identity is not an
+alias on the hosting pod — it only has what it was granted, container by
+container. Making the tracker usable from a delegated or shared identity means
+a **configurable working container** rather than one derived from
+`pim:storage`, which is also what the `docs/todo-tracker-kit-dashboard.md`
+decision "no `pim:storage` to a collective pod" already implies. Not built.
 
 ### Data model
 

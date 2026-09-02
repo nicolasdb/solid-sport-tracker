@@ -2,7 +2,6 @@ import "./style.css";
 import { completeLogin, getSession, loginWithIdentifier, logout } from "./lib/auth";
 import {
   carnetsContainer,
-  ensureTrackerScaffold,
   describePodError,
   getPrimaryPodUrl,
   isAuthError,
@@ -176,7 +175,8 @@ async function loadProgramme(containerUrl: string): Promise<Programme> {
 async function renderApp(webId: string) {
   const podUrl = await getPrimaryPodUrl(webId);
   console.info("[sport-tracker] WebID:", webId, "→ racine du pod:", podUrl);
-  await ensureTrackerScaffold(podUrl);
+  // Se connecter ne doit rien écrire : le scaffold n'est créé qu'au moment où
+  // l'usager ouvre son premier carnet.
   const carnetUrls = await listCarnetUrls(podUrl);
 
   if (carnetUrls.length === 0) {
@@ -256,12 +256,15 @@ function renderNewLogbookView(webId: string, podUrl: string) {
   app.innerHTML = `
     <main class="screen">
       <p class="lead">Connecté en tant que <code>${webId}</code>.</p>
-      <p>Aucun carnet trouvé sous <code>${carnetsContainer(podUrl)}</code>.</p>
+      <p>Aucun carnet sur ce pod. Rien n'y a été écrit : ouvrir un carnet est
+        la première écriture, et elle t'appartient.</p>
       <form id="new-logbook">
         <label for="recette">Adresse de la recette</label>
         <input id="recette" name="recette" type="url" value="${RECETTE_EXEMPLE}" required />
         <p class="meta">La recette est copiée dans ton carnet ; son adresse d'origine
           est conservée comme provenance, sans lien vivant.</p>
+        <p class="meta">Créera <code>${carnetsContainer(podUrl)}</code> et un container
+          par carnet en dessous.</p>
         <p class="error" id="new-error" hidden></p>
         <button type="submit" id="new-submit">Ouvrir le carnet</button>
       </form>

@@ -108,11 +108,21 @@ export function preferencesUrl(podUrl: string): string {
   return new URL("sport-tracker/preferences.ttl", podUrl).toString();
 }
 
-/** Liste les URLs des containers de carnets présents sous /sport-tracker/carnets/. */
+/**
+ * Liste les URLs des containers de carnets présents sous /sport-tracker/carnets/.
+ * Container absent = pod sur lequel le tracker n'a jamais rien écrit, ce qui
+ * est un état normal et pas une erreur : c'est justement l'état d'un pod qu'on
+ * ne veut pas modifier avant que l'usager l'ait demandé.
+ */
 export async function listCarnetUrls(podUrl: string): Promise<string[]> {
   const container = carnetsContainer(podUrl);
-  const dataset = await getSolidDataset(container, { fetch });
-  return getContainedResourceUrlAll(dataset);
+  try {
+    const dataset = await getSolidDataset(container, { fetch });
+    return getContainedResourceUrlAll(dataset);
+  } catch (err) {
+    if (err instanceof FetchError && err.statusCode === 404) return [];
+    throw err;
+  }
 }
 
 /** Lit la fiche d'un carnet (carnet.ttl) à l'intérieur d'un container de carnet. */
@@ -213,30 +223,22 @@ async function ensureContainer(url: string): Promise<void> {
   }
 }
 
-async function ensurePreferences(podUrl: string): Promise<void> {
-  const url = preferencesUrl(podUrl);
-  try {
-    await getSolidDataset(url, { fetch });
-  } catch (err) {
-    if (!(err instanceof FetchError) || err.statusCode !== 404) throw err;
-    const thing = buildThing(createThing({ url: `${url}#it` }))
-      .addUrl(RDF.type, st.Preferences)
-      .setInteger(st.afficherTimer, 1)
-      .build();
-    await saveSolidDatasetAt(url, setThing(createSolidDataset(), thing), { fetch });
-  }
-}
-
 /**
- * Crée /sport-tracker/, /sport-tracker/carnets/ et preferences.ttl s'ils
- * n'existent pas encore. Idempotent — ne touche à rien si déjà en place.
+ * Crée /sport-tracker/ et /sport-tracker/carnets/ s'ils n'existent pas encore.
+ * Idempotent — ne touche à rien si déjà en place.
+ *
+ * **À n'appeler que depuis une action explicite de l'usager**, jamais au
+ * login : se connecter à un pod ne doit rien y écrire. `preferences.ttl` n'en
+ * fait volontairement pas partie — `readPreferences` sait vivre sans, et un
+ * document de préférences vides n'a aucune raison d'exister avant qu'une
+ * préférence soit posée.
+ *
  * Ne gère pas les ACL : les ressources créées héritent du contrôle d'accès
  * du container parent le plus proche (privé par défaut sur un pod perso).
  */
 export async function ensureTrackerScaffold(podUrl: string): Promise<void> {
   await ensureContainer(trackerContainer(podUrl));
   await ensureContainer(carnetsContainer(podUrl));
-  await ensurePreferences(podUrl);
 }
 
 function slugify(titre: string): string {
