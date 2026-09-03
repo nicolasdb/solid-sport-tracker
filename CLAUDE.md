@@ -129,8 +129,14 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   séance is measured even when few steps are timed.
 - `src/lib/wake-lock.ts` — `ScreenWakeLock`, keeps the screen on during a
   session. The browser drops the lock whenever the page is hidden, hence
-  `reacquire()` on `visibilitychange`; unsupported (Firefox mobile, insecure
-  contexts) degrades silently rather than erroring.
+  `reacquire()` on `visibilitychange`. Two routes to the *same* OS sleep
+  inhibition, not a strong one and a weak one: `navigator.wakeLock` when it
+  exists, otherwise a muted looping `public/blank.webm` — a browser playing
+  video asks the system to stay awake by itself (the "YouTube trick"). The
+  video also takes over when a granted lock is released unexpectedly while
+  still wanted, so "the toggle doesn't hold" degrades instead of failing. Both
+  need a user gesture, like the `AudioContext` in `signals.ts`. No MP4
+  variant, so old iOS Safari (no `wakeLock` before 18.4) stays uncovered.
 - `src/lib/signals.ts` — `SessionSignals`: beeps (Web Audio, no asset to
   load) and vibration, so a session can be followed without looking at the
   screen. `PATTERNS` maps event → tones + vibration and is the single place to

@@ -743,7 +743,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   const wakeLock = new ScreenWakeLock();
   const prefs = loadDevicePrefs();
   const signals = new SessionSignals(prefs);
-  wireDevicePrefs(prefs, signals, wakeLock, () => timer.getSnapshot().running);
+  wireDevicePrefs(prefs, signals, wakeLock);
 
   /**
    * Un signal marque une fin d'étape, mais toutes les fins ne se valent pas :
@@ -835,7 +835,8 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     blocItems.forEach((item, index) => {
       const offset = index - state.stepIndex;
       item.classList.toggle("is-current", !state.done && offset === 0);
-      item.classList.toggle("is-past", !state.done && offset < 0);
+      item.classList.toggle("is-last-done", !state.done && offset === -1);
+      item.classList.toggle("is-past", !state.done && offset < -1);
       item.classList.toggle("is-far", !state.done && offset > LOOKAHEAD);
     });
   };
@@ -874,8 +875,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
 function wireDevicePrefs(
   prefs: DevicePrefs,
   signals: SessionSignals,
-  wakeLock: ScreenWakeLock,
-  isRunning: () => boolean
+  wakeLock: ScreenWakeLock
 ): void {
   const soundBtn = document.querySelector<HTMLButtonElement>("#opt-sound")!;
   const hapticBtn = document.querySelector<HTMLButtonElement>("#opt-haptic")!;
@@ -890,7 +890,14 @@ function wireDevicePrefs(
     soundBtn.setAttribute("aria-pressed", String(prefs.sound));
     hapticBtn.setAttribute("aria-pressed", String(prefs.haptic));
     screenBtn.setAttribute("aria-pressed", String(prefs.screenOn));
+    // Le chemin réellement actif, pas l'intention : « écran allumé » demandé et
+    // « verrou tenu » sont deux choses différentes, et seule la seconde se
+    // vérifie. Sondé, faute d'événement quand le verrou tombe côté vidéo.
+    const marque = { native: "🔒", video: "🎞", off: "⚠️" }[wakeLock.status];
+    const chutes = wakeLock.drops > 0 ? `×${wakeLock.drops}` : "";
+    screenBtn.textContent = `🔆 Écran ${prefs.screenOn ? marque + chutes : ""}`.trim();
   };
+  setInterval(paint, 2000);
 
   const toggle = (key: keyof DevicePrefs) => async () => {
     prefs[key] = !prefs[key];
@@ -902,8 +909,14 @@ function wireDevicePrefs(
     // Un aperçu du signal : on n'active pas une option à l'aveugle.
     if (key !== "screenOn" && prefs[key]) signals.emit("phase");
     if (key === "screenOn") {
-      if (prefs.screenOn && isRunning()) await wakeLock.acquire();
+      // Pas de condition sur « séance en cours » : le bouton promet un écran
+      // allumé, et ce tap est le geste utilisateur dont l'acquisition a besoin.
+      // Attendre le démarrage, c'était promettre sans tenir.
+      if (prefs.screenOn) await wakeLock.acquire();
       if (!prefs.screenOn) await wakeLock.release();
+      // L'acquisition est asynchrone : sans ce second passage, le bouton
+      // afficherait « rien de tenu » jusqu'au prochain sondage.
+      paint();
     }
   };
 
