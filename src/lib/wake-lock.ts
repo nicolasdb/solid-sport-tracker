@@ -19,6 +19,14 @@
  * tombe alors qu'on le voulait encore, on bascule sur la vidéo plutôt que
  * d'abandonner en silence.
  *
+ * La vidéo n'a pas cette libération automatique — un onglet caché ne met pas
+ * en pause une vidéo en cours tout seul, contrairement au verrou natif. Sans
+ * l'écouteur ci-dessous, un tour de téléphone verrouillé pendant que l'onglet
+ * reste ouvert en arrière-plan (pas fermé, juste oublié) laisserait la vidéo
+ * boucler pour rien : plus personne ne regarde l'écran qu'elle empêche de
+ * s'éteindre. La classe s'aligne donc elle-même sur le comportement du verrou
+ * natif plutôt que de compter sur l'appelant pour y penser à chaque écran.
+ *
  * `blank.webm` seulement : pas de variante MP4, donc Safari iOS ancien n'est
  * pas couvert par la retombée — c'est déjà la plateforme la plus contrainte
  * (cf. la limite haptique dans le README).
@@ -27,6 +35,19 @@ export class ScreenWakeLock {
   private sentinel: WakeLockSentinel | null = null;
   private video: HTMLVideoElement | null = null;
   private wanted = false;
+
+  constructor() {
+    if (typeof document === "undefined") return;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        // Pas un drop : c'est la même mise en veille que le verrou natif
+        // s'impose déjà tout seul, appliquée à la vidéo pour qu'elle la suive.
+        this.stopVideo();
+      } else {
+        void this.reacquire();
+      }
+    });
+  }
 
   /** Vrai dans tout navigateur : la retombée vidéo n'a besoin d'aucune API. */
   get supported(): boolean {
