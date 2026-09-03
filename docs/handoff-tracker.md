@@ -115,10 +115,12 @@ divergent enfin.
 
 ---
 
-## 5. Le vocabulaire des signaux ne couvre pas le départ — **à tester, maintenant possible**
+## 5. Le vocabulaire des signaux ne couvre pas le départ — **testé, suffisant**
 
-> §1 est fait : reste à écouter en vrai si `phase, phase, phase` suffit sans
-> compter, sur `diagnostic-app.ttl` étape 4. Pas encore fait.
+> Écouté en vrai sur `diagnostic-app.ttl` étape 4, deux passes (son seul,
+> haptique seul) : `phase, phase, phase` suffit à savoir dans quelle phase on
+> est sans compter. Pas de motif distinct par phase à ajouter pour l'instant —
+> à revisiter si un métronome à plus de deux phases s'avère moins lisible.
 
 `SignalKind` est `tick | phase | step | session` : quatre événements de
 **fin**. Rien ne marque le *début* d'une étape.
