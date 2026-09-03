@@ -816,7 +816,13 @@ interface DevicePrefs extends SignalPrefs {
 
 const DEVICE_PREFS_KEY = "sst:device-prefs";
 
-const DEFAULT_DEVICE_PREFS: DevicePrefs = { sound: true, haptic: true, screenOn: true };
+// screenOn démarre éteint : l'acquisition tente le verrou natif puis la
+// vidéo dès le premier « Démarrer », et cette tentative est justement ce qui
+// affiche ⚠️ un instant avant de trouver un chemin — un ⚠️ qu'on ne demandait
+// pas, à l'ouverture de chaque séance, pour une option que tout le monde ne
+// veut pas. L'usager l'allume s'il en a besoin ; sound et haptic restent par
+// défaut, ce sont eux qui portent le suivi sans écran.
+const DEFAULT_DEVICE_PREFS: DevicePrefs = { sound: true, haptic: true, screenOn: false };
 
 function loadDevicePrefs(): DevicePrefs {
   try {
