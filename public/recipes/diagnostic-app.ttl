@@ -1,0 +1,89 @@
+@prefix act:  <https://vocab.nicolasdb.eu/activity#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# Diagnostic app — tous les types.
+#
+# Ceci n'est pas un protocole d'entraînement : c'est un instrument de test.
+# Les titres sont volontairement non anatomiques pour qu'on ne soit pas tenté
+# de juger la séance sur son contenu.
+#
+# Objectif : rendre audibles, en moins de trois minutes et sans regarder
+# l'écran, les quatre signaux (tick / phase / step / session), les deux
+# comportements de bouton (décompte vs validation) et le contraste
+# IntervalStep / RepeatStep.
+#
+# 27 secondes chronométrées. Le reste dépend de la vitesse des validations.
+#
+# Attendu, dans l'ordre :
+#   1. tick ×3, step
+#   2. step            (bouton « C'est fait », aucun décompte)
+#   3. step            (identique à 2 hors affichage du programme)
+#   4. phase, phase, phase, step   — et AUCUN tap entre les phases
+#   5. step ×3         (jamais phase : c'est le contraste qui prouve 4)
+#   6. session
+
+<#it> a act:Protocol ;
+  act:title "Diagnostic app — tous les types" ;
+  act:goal "Vérifier l'exécution et les retours sonores/haptiques de chaque type d'étape" ;
+  act:cadence "À chaque changement du code de signal" ;
+  act:hasStep <#chrono>, <#compte>, <#controle>, <#metronome>, <#circuit> .
+
+# 1 — Le seul endroit où l'on entend « tick ». Attendu : 3, 2, 1 puis « step ».
+<#chrono> a act:TimedStep ;
+  act:order 1 ;
+  act:title "Chrono court" ;
+  act:note "Écouter le décompte des trois dernières secondes" ;
+  act:targetSeconds 5 .
+
+# 2 — Aucun décompte, l'usager clôt. Attendu : bouton « C'est fait », « step ».
+<#compte> a act:CountedStep ;
+  act:order 2 ;
+  act:title "Étape comptée" ;
+  act:note "Taper trois fois, à son rythme" ;
+  act:targetCount 3 ;
+  act:unit "répétitions" .
+
+# 3 — Doit se comporter exactement comme 2, hors affichage du programme.
+#     Toute divergence ici est une divergence non voulue.
+<#controle> a act:ChecklistStep ;
+  act:order 3 ;
+  act:title "Point de contrôle" ;
+  act:note "Rien à mesurer : fait, ou pas fait" .
+
+# 4 — LE test décisif. Si l'app demande « Je suis prêt » entre A et B,
+#     IntervalStep ne se distingue en rien d'un RepeatStep de TimedStep.
+<#metronome> a act:IntervalStep ;
+  act:order 4 ;
+  act:title "Métronome" ;
+  act:note "Ne rien toucher : les phases doivent s'enchaîner seules" ;
+  act:rounds 2 ;
+  act:hasPhase <#metronome-a>, <#metronome-b> .
+
+<#metronome-a> a act:Phase ;
+  act:order 1 ;
+  act:title "phase A" ;
+  act:targetSeconds 4 .
+
+<#metronome-b> a act:Phase ;
+  act:order 2 ;
+  act:title "phase B" ;
+  act:targetSeconds 3 .
+
+# 5 — Le contraste : mêmes durées, structure imbriquée. Attendu : libellés
+#     suffixés « (1) » et « (2) », et « step » à chaque transition.
+<#circuit> a act:RepeatStep ;
+  act:order 5 ;
+  act:title "Circuit imbriqué" ;
+  act:times 2 ;
+  act:hasStep <#circuit-chrono>, <#circuit-compte> .
+
+<#circuit-chrono> a act:TimedStep ;
+  act:order 1 ;
+  act:title "Chrono imbriqué" ;
+  act:targetSeconds 4 .
+
+<#circuit-compte> a act:CountedStep ;
+  act:order 2 ;
+  act:title "Compte imbriqué" ;
+  act:targetCount 2 ;
+  act:unit "répétitions" .

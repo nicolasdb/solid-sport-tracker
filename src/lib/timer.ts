@@ -1,6 +1,8 @@
 export interface TimerStep {
   label: string;
   seconds: number;
+  /** Démarre sans attendre de validation quand l'étape précédente se clôt. */
+  chain?: boolean;
 }
 
 export interface TimerState {
@@ -108,11 +110,16 @@ export class SequenceTimer {
   start(): void {
     if (this.running || this.stepIndex >= this.steps.length) return;
     this.awaitingReady = false;
+    this.beginStep();
+    this.emit();
+  }
+
+  /** Fait courir l'horloge sur le bloc courant, sans notifier. */
+  private beginStep(): void {
     this.running = true;
     this.startedAt ??= new Date();
     this.stepStartedAt = Date.now();
     this.intervalId = window.setInterval(() => this.resync(), 250);
-    this.emit();
   }
 
   pause(): void {
@@ -127,10 +134,16 @@ export class SequenceTimer {
    */
   resync(): void {
     if (!this.running) return;
+    // Un onglet caché throttle son intervalle : le retour au premier plan
+    // peut trouver plusieurs blocs déjà épuisés d'un coup (un intervalle
+    // entier, par exemple, maintenant qu'il s'enchaîne tout seul). On les
+    // vide tous avant de notifier, pour qu'un rattrapage ne tire pas une
+    // rafale de signaux — signalTransitions ne compare que l'index avant/après.
     this.foldElapsed();
-    if (this.isTimed() && this.remainingSeconds() <= 0) {
-      this.advance(true);
-      return;
+    while (this.isTimed() && this.remainingSeconds() <= 0) {
+      const chained = this.advance(true, { silent: true });
+      if (!chained) break;
+      this.foldElapsed();
     }
     this.emit();
   }
@@ -183,10 +196,17 @@ export class SequenceTimer {
   }
 
   /**
-   * Arme le bloc suivant sans le lancer : on laisse l'usager souffler et
-   * reprendre quand il est prêt plutôt que d'enchaîner automatiquement.
+   * Clôt le bloc courant. Arme le suivant et attend le feu vert de l'usager,
+   * sauf si la transition est marquée `chain` — l'entrée dans un intervalle
+   * attend toujours, tout le reste de l'intervalle s'enchaîne (voir
+   * `RunnableStep.chain` dans `vocab/protocol.ts`).
+   *
+   * `opts.silent` évite d'émettre ici : `resync()` s'en sert pour vider
+   * plusieurs blocs d'affilée sans notifier à chaque pas. Renvoie vrai si le
+   * bloc suivant s'est enchaîné sans attendre (donc si `resync()` doit
+   * continuer à vérifier).
    */
-  private advance(completed: boolean): void {
+  private advance(completed: boolean, opts: { silent?: boolean } = {}): boolean {
     this.stopTicking();
     if (this.stepIndex < this.steps.length) {
       this.completed[this.stepIndex] = completed;
@@ -194,11 +214,13 @@ export class SequenceTimer {
     this.stepIndex += 1;
     if (this.stepIndex >= this.steps.length) {
       this.awaitingReady = false;
-      this.emit();
-      return;
+      if (!opts.silent) this.emit();
+      return false;
     }
-    this.awaitingReady = true;
-    this.emit();
+    this.awaitingReady = !this.steps[this.stepIndex]?.chain;
+    if (!this.awaitingReady) this.beginStep();
+    if (!opts.silent) this.emit();
+    return !this.awaitingReady;
   }
 
   private getState(): TimerState {

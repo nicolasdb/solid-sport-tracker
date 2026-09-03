@@ -10,9 +10,11 @@ import {
   listTurtleUrls,
   logSeance,
   readCarnet,
+  readPreferences,
   readSeance,
   readSeanceModele,
   seanceDayFromUrl,
+  setActiveCarnet,
 } from "./lib/pod";
 import {
   createLogbookFromProtocol,
@@ -31,6 +33,7 @@ import {
 import { ScreenWakeLock } from "./lib/wake-lock";
 import { SessionSignals, type SignalKind, type SignalPrefs } from "./lib/signals";
 import {
+  countUnrecognized,
   describeStep,
   flattenSteps,
   type RunnableStep,
@@ -172,7 +175,12 @@ async function loadProgramme(containerUrl: string): Promise<Programme> {
   };
 }
 
-async function renderApp(webId: string) {
+/**
+ * @param carnetUrl Carnet à ouvrir explicitement (venant du picker). Sans ça,
+ *   on retombe sur `st:carnetActif` (préférences), puis sur le premier carnet
+ *   trouvé — l'ordre déjà en place avant le picker.
+ */
+async function renderApp(webId: string, carnetUrl?: string) {
   const podUrl = await getPrimaryPodUrl(webId);
   console.info("[sport-tracker] WebID:", webId, "→ racine du pod:", podUrl);
   // Se connecter ne doit rien écrire : le scaffold n'est créé qu'au moment où
@@ -184,12 +192,23 @@ async function renderApp(webId: string) {
     return;
   }
 
-  const programme = await loadProgramme(carnetUrls[0]);
+  const prefs = await readPreferences(podUrl);
+  const active =
+    carnetUrl && carnetUrls.includes(carnetUrl)
+      ? carnetUrl
+      : prefs.carnetActifUrl && carnetUrls.includes(prefs.carnetActifUrl)
+        ? prefs.carnetActifUrl
+        : carnetUrls[0];
+
+  const programme = await loadProgramme(active);
   const runnable = flattenSteps(programme.steps);
+  // legacyToSteps ne produit jamais de type non reconnu : le vocabulaire
+  // st: n'a que des blocs, il n'y a rien à mal typer.
+  const unrecognized = programme.legacy ? 0 : countUnrecognized(programme.steps);
 
   const ctx: SeanceContext = {
     webId,
-    carnetContainerUrl: carnetUrls[0],
+    carnetContainerUrl: active,
     carnetTitre: programme.titre,
     protocolUrl: programme.protocolUrl ?? "",
     legacy: programme.legacy,
@@ -199,6 +218,7 @@ async function renderApp(webId: string) {
   app.innerHTML = `
     <main class="session">
       <header class="topbar">
+        <button id="pick-carnet" class="ghost">Carnets</button>
         <span class="webid">${webId}</span>
         <button id="logout" class="ghost">Déconnexion</button>
       </header>
@@ -211,6 +231,12 @@ async function renderApp(webId: string) {
           hasDraft
             ? `<p class="banner">Séance non enregistrée en attente.
                  <button id="resume-recap" class="ghost">Reprendre</button></p>`
+            : ""
+        }
+        ${
+          unrecognized > 0
+            ? `<p class="banner">${unrecognized} étape(s) de type non reconnu, exécutée(s)
+                 comme simple validation.</p>`
             : ""
         }
         <h1>${programme.titre}</h1>
@@ -234,6 +260,12 @@ async function renderApp(webId: string) {
     renderLoginView();
   });
 
+  document.querySelector<HTMLButtonElement>("#pick-carnet")!.addEventListener("click", () => {
+    renderCarnetPickerView(webId, podUrl, carnetUrls, active).catch((err) =>
+      renderErrorView(webId, err)
+    );
+  });
+
   if (hasDraft) {
     document.querySelector<HTMLButtonElement>("#resume-recap")!.addEventListener("click", () => {
       // Le brouillon fournit le relevé ; l'enregistrement vide sert juste de base.
@@ -252,12 +284,20 @@ async function renderApp(webId: string) {
 }
 
 /** Ouverture d'un carnet à partir de l'adresse d'une recette. */
-function renderNewLogbookView(webId: string, podUrl: string) {
+/**
+ * @param onCancel Présent quand ce carnet n'est pas le seul recours — on
+ *   arrive ici depuis le picker, pas depuis un pod vierge — pour offrir un
+ *   retour plutôt que de coincer l'usager dans un formulaire.
+ */
+function renderNewLogbookView(webId: string, podUrl: string, onCancel?: () => void) {
   app.innerHTML = `
     <main class="screen">
       <p class="lead">Connecté en tant que <code>${webId}</code>.</p>
-      <p>Aucun carnet sur ce pod. Rien n'y a été écrit : ouvrir un carnet est
-        la première écriture, et elle t'appartient.</p>
+      <p>${
+        onCancel
+          ? "Adresse d'une nouvelle recette à ouvrir en carnet."
+          : "Aucun carnet sur ce pod. Rien n'y a été écrit : ouvrir un carnet est la première écriture, et elle t'appartient."
+      }</p>
       <form id="new-logbook">
         <label for="recette">Adresse de la recette</label>
         <input id="recette" name="recette" type="url" value="${RECETTE_EXEMPLE}" required />
@@ -267,8 +307,9 @@ function renderNewLogbookView(webId: string, podUrl: string) {
           par carnet en dessous.</p>
         <p class="error" id="new-error" hidden></p>
         <button type="submit" id="new-submit">Ouvrir le carnet</button>
+        ${onCancel ? `<button type="button" id="new-cancel" class="ghost">Annuler</button>` : ""}
       </form>
-      <button id="logout" class="ghost">Se déconnecter</button>
+      ${onCancel ? "" : `<button id="logout" class="ghost">Se déconnecter</button>`}
     </main>
   `;
 
@@ -281,8 +322,9 @@ function renderNewLogbookView(webId: string, podUrl: string) {
     btn.textContent = "Création en cours…";
     errorEl.hidden = true;
     try {
-      await createLogbookFromProtocol(podUrl, uri);
-      await renderApp(webId);
+      const logbookUrl = await createLogbookFromProtocol(podUrl, uri);
+      await setActiveCarnet(podUrl, logbookUrl);
+      await renderApp(webId, logbookUrl);
     } catch (err) {
       errorEl.textContent = describePodError(err);
       errorEl.hidden = false;
@@ -291,9 +333,82 @@ function renderNewLogbookView(webId: string, podUrl: string) {
     }
   });
 
-  document.querySelector<HTMLButtonElement>("#logout")!.addEventListener("click", async () => {
-    await logout();
-    renderLoginView();
+  if (onCancel) {
+    document.querySelector<HTMLButtonElement>("#new-cancel")!.addEventListener("click", onCancel);
+  } else {
+    document.querySelector<HTMLButtonElement>("#logout")!.addEventListener("click", async () => {
+      await logout();
+      renderLoginView();
+    });
+  }
+}
+
+/**
+ * Écran de bascule entre carnets. Atteint depuis le bouton « Carnets » de la
+ * séance ; pas de router, on rend juste un autre écran par-dessus le DOM.
+ */
+async function renderCarnetPickerView(
+  webId: string,
+  podUrl: string,
+  carnetUrls: string[],
+  activeCarnetUrl: string
+) {
+  app.innerHTML = `
+    <main class="screen">
+      <button id="pick-back" class="ghost">← Retour</button>
+      <h1>Carnets</h1>
+      <ol class="blocs" id="carnet-list">
+        ${carnetUrls
+          .map(
+            (url) => `
+          <li class="bloc${url === activeCarnetUrl ? " is-current" : ""}">
+            <span>…</span>
+            <button data-carnet="${url}" ${url === activeCarnetUrl ? "disabled" : ""}>
+              ${url === activeCarnetUrl ? "Actif" : "Ouvrir"}
+            </button>
+          </li>`
+          )
+          .join("")}
+      </ol>
+      <button id="new-carnet" class="ghost">Nouveau carnet</button>
+    </main>
+  `;
+
+  document.querySelector<HTMLButtonElement>("#pick-back")!.addEventListener("click", () => {
+    renderApp(webId, activeCarnetUrl).catch((err) => renderErrorView(webId, err));
+  });
+  document.querySelector<HTMLButtonElement>("#new-carnet")!.addEventListener("click", () => {
+    renderNewLogbookView(webId, podUrl, () => renderCarnetPickerView(webId, podUrl, carnetUrls, activeCarnetUrl));
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("#carnet-list button[data-carnet]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const url = btn.dataset.carnet!;
+      btn.disabled = true;
+      btn.textContent = "Ouverture…";
+      try {
+        await setActiveCarnet(podUrl, url);
+        await renderApp(webId, url);
+      } catch (err) {
+        renderErrorView(webId, err);
+      }
+    });
+  });
+
+  // Titres chargés après affichage : la liste ne dépend pas d'un aller-retour
+  // supplémentaire pour apparaître, seul le libellé se remplit ensuite.
+  carnetUrls.forEach((url, i) => {
+    loadProgramme(url)
+      .then((programme) => {
+        const item = document.querySelectorAll<HTMLLIElement>("#carnet-list li")[i];
+        const span = item?.querySelector("span");
+        if (span) span.textContent = programme.titre;
+      })
+      .catch(() => {
+        const item = document.querySelectorAll<HTMLLIElement>("#carnet-list li")[i];
+        const span = item?.querySelector("span");
+        if (span) span.textContent = "(carnet illisible)";
+      });
   });
 }
 
@@ -606,8 +721,16 @@ function saveDevicePrefs(prefs: DevicePrefs): void {
 /** Nombre de blocs suivants gardés visibles sur petit écran, en plus du bloc courant. */
 const LOOKAHEAD = 2;
 
+/**
+ * Sous ce seuil, l'étape est trop courte pour mériter un décompte : elle est
+ * son propre signal, et le tick chevaucherait le bip qui vient de l'ouvrir.
+ */
+const TICK_MIN_SECONDS = 5;
+
 function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
-  const timer = new SequenceTimer(steps.map((s) => ({ label: s.label, seconds: s.seconds })));
+  const timer = new SequenceTimer(
+    steps.map((s) => ({ label: s.label, seconds: s.seconds, chain: s.chain }))
+  );
   const label = document.querySelector<HTMLSpanElement>("#timer-label")!;
   const remaining = document.querySelector<HTMLSpanElement>("#timer-remaining")!;
   const toggleBtn = document.querySelector<HTMLButtonElement>("#timer-toggle")!;
@@ -629,13 +752,9 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
    * suivante vient encore du même `IntervalStep`.
    */
   const endSignal = (index: number): SignalKind => {
-    const current = steps[index];
     const next = steps[index + 1];
     if (!next) return "session";
-    if (current?.sourceStep.kind === "interval" && next.sourceStep === current.sourceStep) {
-      return "phase";
-    }
-    return "step";
+    return next.chain ? "phase" : "step";
   };
 
   let recapOpened = false;
@@ -675,6 +794,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     if (
       state.running &&
       state.timed &&
+      (state.step?.seconds ?? 0) >= TICK_MIN_SECONDS &&
       state.remaining > 0 &&
       state.remaining <= 3 &&
       state.remaining !== prev.remaining

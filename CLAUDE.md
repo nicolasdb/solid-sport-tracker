@@ -106,9 +106,16 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   single carnet never mixes two vocabularies. No migration exists, on purpose.
 - `src/lib/timer.ts` — `SequenceTimer`, a sequential timer over a séance's
   blocks (start/pause/skip/reset). Deliberately independent of pod/DOM code so
-  it can be tested/reasoned about in isolation. It does **not** auto-chain: when
-  a block's time runs out it arms the next one and sets `awaitingReady`, waiting
-  for `start()` as the user's go-ahead, so there's a breather between blocks.
+  it can be tested/reasoned about in isolation. Chaining is per-transition, not
+  a global switch: by default, when a block's time runs out it arms the next
+  one and sets `awaitingReady`, waiting for `start()` as the user's go-ahead,
+  so there's a breather between blocks. The exception is `TimerStep.chain` —
+  set true between consecutive phases of one `IntervalStep`, since that's the
+  same effort continuing, not a new block to confirm. `chain` is computed once,
+  in `flattenSteps` (`vocab/protocol.ts`) on `RunnableStep`, and nowhere else —
+  it's the only place that knows it just emitted two consecutive phases of the
+  same interval, and `main.ts`'s `endSignal` reads the same flag rather than
+  re-deriving it.
   `getSnapshot()` exposes state for click handlers; `subscribe()` for rendering.
   `getRecord()` returns what actually happened (start time, per-block elapsed
   and completed/skipped) — the session log is a byproduct of running the timer,

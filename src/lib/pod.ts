@@ -211,6 +211,32 @@ export async function readPreferences(podUrl: string): Promise<Preferences> {
   };
 }
 
+/**
+ * Fixe le carnet actif dans preferences.ttl. Première écriture explicite de ce
+ * document — il ne fait pas partie du scaffold (voir `ensureTrackerScaffold`) :
+ * un document de préférences vide n'a pas de raison d'exister avant que
+ * l'usager n'ait un choix à faire entre plusieurs carnets.
+ */
+export async function setActiveCarnet(podUrl: string, carnetUrl: string): Promise<void> {
+  const url = preferencesUrl(podUrl);
+  let dataset;
+  try {
+    dataset = await getSolidDataset(url, { fetch });
+  } catch (err) {
+    if (err instanceof FetchError && err.statusCode === 404) {
+      dataset = createSolidDataset();
+    } else {
+      throw err;
+    }
+  }
+  const existing = getThing(dataset, `${url}#it`);
+  const thing = buildThing(existing ?? createThing({ url: `${url}#it` }))
+    .addUrl(RDF.type, st.Preferences)
+    .setUrl(st.carnetActif, carnetUrl)
+    .build();
+  await saveSolidDatasetAt(url, setThing(dataset, thing), { fetch });
+}
+
 async function ensureContainer(url: string): Promise<void> {
   try {
     await getSolidDataset(url, { fetch });

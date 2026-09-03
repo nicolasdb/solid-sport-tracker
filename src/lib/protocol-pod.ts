@@ -125,9 +125,16 @@ function readStep(dataset: SolidDataset, url: string): Step | null {
       targetSeconds: getInteger(thing, act.targetSeconds) ?? 0,
     };
   }
+  if (types.includes(act.ChecklistStep)) {
+    return { kind: "checklist", ...common };
+  }
   // Type inconnu : on ne devine pas, mais une étape sans mesure reste
   // exécutable — mieux vaut l'afficher que perdre une étape du protocole.
-  return { kind: "checklist", ...common };
+  // Marquée `unrecognized` pour que l'app le dise plutôt que de faire passer
+  // une faute de frappe (ou un act:RecordStep pas encore posé) pour une
+  // checklist voulue.
+  console.warn("[sport-tracker] type d'étape non reconnu", url, types);
+  return { kind: "checklist", ...common, unrecognized: true };
 }
 
 /** Étapes d'un conteneur (protocole ou groupe répété), triées par act:order. */
@@ -266,6 +273,13 @@ function slugify(title: string): string {
  * Sans copie, une v2 publiée par l'auteur changerait rétroactivement le
  * protocole des séances déjà consignées, et le carnet cesserait d'être
  * comparable à lui-même.
+ */
+/**
+ * Copie le protocole dans le carnet. Attention : la copie re-sérialise le
+ * modèle *parsé* (`buildProtocolDataset`), pas le dataset brut lu sur le pod
+ * source. Une étape dont le type RDF n'a pas été reconnu à la lecture est
+ * donc écrite ici en `act:ChecklistStep` — la perte est définitive à la
+ * copie, pas seulement à l'affichage.
  */
 export async function createLogbookFromProtocol(
   podUrl: string,

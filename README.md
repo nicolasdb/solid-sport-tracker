@@ -80,8 +80,11 @@ nouveau build, sans redémarrer le conteneur.
 - ✅ Lecture du premier carnet trouvé sous `/sport-tracker/carnets/` et de
   son modèle de séance.
 - ✅ Timer séquentiel sur les blocs de la séance (démarrer/pause/passer/
-  réinitialiser). En fin de bloc il n'enchaîne pas tout seul : il arme le
-  bloc suivant et attend le feu vert, pour laisser souffler.
+  réinitialiser). En fin de bloc, le feu vert reste la règle : il arme le
+  bloc suivant et attend l'usager, pour laisser souffler. Exception
+  volontaire : entre deux phases d'un intervalle (`IntervalStep`), il
+  enchaîne tout seul — c'est le même effort qui continue, et c'est ce qui
+  distingue un intervalle d'un `RepeatStep` de `TimedStep`.
 - ✅ Minuteur fiable écran éteint : le temps est mesuré en deltas
   `Date.now()`, jamais en comptant les ticks — un onglet en arrière-plan est
   throttlé voire gelé par Android, et l'ancien décompte par ticks
@@ -92,12 +95,16 @@ nouveau build, sans redémarrer le conteneur.
   depuis le premier démarrage (pauses et transitions comprises), pas la somme
   des blocs chronométrés.
 - ✅ Suivre la séance sans regarder l'écran : bip (Web Audio, aucun fichier
-  son) et vibration sur le décompte des 3 dernières secondes, la fin d'une
+  son) et vibration sur le décompte des 3 dernières secondes (étapes de 5 s ou
+  plus seulement — en dessous le bip qui ouvre l'étape suffit), la fin d'une
   phase d'intervalle, la fin d'une étape et la fin de séance — quatre motifs
   distinguables à l'oreille et au poignet. Trois options le long du minuteur
   (bip, vibration, écran allumé) se règlent en pleine séance : silence en
   yoga collectif, son en courant. Elles vivent dans le navigateur, pas sur le
-  pod — elles décrivent l'appareil du moment, pas l'usager.
+  pod — elles décrivent l'appareil du moment, pas l'usager. **Limite
+  assumée, pas un bug : `navigator.vibrate` n'existe pas sur iOS Safari, donc
+  suivre au haptique seul est inatteignable sur iPhone — le canal utilisable
+  y est le son.**
 - ✅ UI pensée mobile : colonne pleine hauteur en `dvh`, minuteur ancré en
   bas avec marges `env(safe-area-inset-*)` pour ne pas passer sous les
   barres du navigateur, et programme réduit au bloc courant + 2 suivants

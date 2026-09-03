@@ -104,6 +104,13 @@ export interface ChecklistStep {
   url?: string;
   title: string;
   note?: string;
+  /**
+   * Vrai quand la checklist est une retombée du parseur et non un
+   * `act:ChecklistStep` voulu : le type RDF n'a pas été reconnu. L'étape reste
+   * exécutable — mieux vaut l'afficher que la perdre — mais l'app doit le dire
+   * plutôt que de faire passer une faute de frappe pour un choix.
+   */
+  unrecognized?: boolean;
 }
 
 /**
@@ -181,6 +188,20 @@ export interface RunnableStep {
   sourceStep: Step;
   /** Rang d'occurrence quand l'étape est dans un groupe répété (1-indexé). */
   round?: number;
+  /**
+   * Démarre sans attendre de validation quand l'étape précédente se clôt.
+   *
+   * L'enchaînement est une propriété de la **transition**, pas une constante du
+   * minuteur : entre deux phases d'un intervalle il n'y a rien à valider, c'est
+   * le même effort qui continue. Sans ça, `3 × (10 s + 20 s)` demande six taps
+   * et `IntervalStep` ne se distingue plus d'un `RepeatStep` de `TimedStep`.
+   *
+   * Calculé ici et nulle part ailleurs : `flattenSteps` est le seul endroit qui
+   * sache qu'il vient d'émettre deux phases consécutives du même intervalle.
+   * C'est aussi ce qui décide du motif de bip (`endSignal` dans `main.ts`) —
+   * un seul prédicat, pas deux qui dérivent.
+   */
+  chain?: boolean;
 }
 
 /**
@@ -220,14 +241,18 @@ export function flattenSteps(steps: Step[]): RunnableStep[] {
           break;
         case "interval":
           for (let r = 1; r <= step.rounds; r += 1) {
-            for (const phase of step.phases) {
+            step.phases.forEach((phase, phaseIndex) => {
               out.push({
                 label: `${step.title} — ${phase.title} (${r}/${step.rounds})`,
                 seconds: phase.seconds,
                 sourceStep: step,
                 round: r,
+                // Seule l'entrée dans l'intervalle attend le feu vert. Tout le
+                // reste s'enchaîne, frontière de tour comprise : un métronome
+                // qu'il faut relancer à chaque tour n'est pas un métronome.
+                chain: !(r === 1 && phaseIndex === 0),
               });
-            }
+            });
           }
           break;
         case "repeat":
@@ -241,6 +266,18 @@ export function flattenSteps(steps: Step[]): RunnableStep[] {
 
   walk(steps);
   return out;
+}
+
+/**
+ * Nombre d'étapes dont le type RDF n'a pas été reconnu par le parseur.
+ * Sert à le dire à l'usager : une recette peut être du Turtle valide et
+ * pourtant fausse, et une étape avalée en silence ne se voit nulle part.
+ */
+export function countUnrecognized(steps: Step[]): number {
+  return steps.reduce((n, step) => {
+    if (step.kind === "repeat") return n + countUnrecognized(step.steps);
+    return n + (step.kind === "checklist" && step.unrecognized ? 1 : 0);
+  }, 0);
 }
 
 /** Libellé de l'objectif d'une étape, pour l'affichage du programme. */
