@@ -245,7 +245,11 @@ async function renderApp(webId: string, carnetUrl?: string) {
         }
         <h1>${programme.titre}</h1>
         ${programme.objectif ? `<p class="lead">${programme.objectif}</p>` : ""}
-        ${programme.cadence ? `<p class="meta">Fréquence: ${programme.cadence}</p>` : ""}
+        ${
+          programme.cadence
+            ? `<p class="cadence"><span class="label">Fréquence</span> ${programme.cadence}</p>`
+            : ""
+        }
         ${
           runnable.length
             ? `<ol class="blocs">${runnable.map(renderRunnable).join("")}</ol>`
@@ -659,10 +663,11 @@ function renderRunnable(step: RunnableStep, index: number): string {
   // Une étape non chronométrée affiche son objectif (10 squats) plutôt qu'un
   // temps : c'est l'usager qui la valide, pas l'horloge.
   const objectif = step.seconds > 0 ? formatSeconds(step.seconds) : describeStep(step.sourceStep);
-  const note = step.sourceStep.note ? `<p class="meta">${step.sourceStep.note}</p>` : "";
+  const note = step.sourceStep.note ? `<p class="bloc-note">${step.sourceStep.note}</p>` : "";
   return `
     <li class="bloc" data-index="${index}">
-      <strong>${step.label}</strong> <span class="meta">${objectif}</span>
+      <p class="bloc-head"><strong class="bloc-titre">${step.label}</strong>
+        <span class="bloc-objectif">${objectif}</span></p>
       ${note}
     </li>`;
 }
@@ -670,9 +675,11 @@ function renderRunnable(step: RunnableStep, index: number): string {
 function renderTimerBar(firstDuration: number): string {
   return `
     <section id="timer" class="timer">
+      <div class="timer-progress" aria-hidden="true"><div id="timer-progress-fill"></div></div>
       <div class="timer-display">
         <span id="timer-label">Prêt</span>
         <span id="timer-remaining">${formatSeconds(firstDuration)}</span>
+        <span id="timer-count" class="meta"></span>
       </div>
       <div class="timer-controls">
         <button id="timer-toggle">Démarrer</button>
@@ -686,7 +693,7 @@ function renderTimerBar(firstDuration: number): string {
         <button id="opt-sound" class="chip" type="button" aria-pressed="false">🔊 Bip</button>
         <button id="opt-haptic" class="chip" type="button" aria-pressed="false">📳 Vibration</button>
         <button id="opt-screen" class="chip" type="button" aria-pressed="false">🔆 Écran</button>
-        <button id="opt-theme" class="chip" type="button">🌗 Auto</button>
+        <button id="opt-theme" class="chip" type="button">☀️ Clair</button>
       </div>
     </section>
   `;
@@ -743,8 +750,14 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   const resetBtn = document.querySelector<HTMLButtonElement>("#timer-reset")!;
   const finishBtn = document.querySelector<HTMLButtonElement>("#timer-finish")!;
   const timerSection = document.querySelector<HTMLElement>("#timer")!;
+  const progressFill = document.querySelector<HTMLElement>("#timer-progress-fill")!;
+  const count = document.querySelector<HTMLElement>("#timer-count")!;
   const blocItems = Array.from(document.querySelectorAll<HTMLLIElement>("li.bloc"));
 
+  // Le verrou d'écran n'appartient qu'à son bouton : ni « Passer », ni
+  // « Réinit. », ni une pause ne le relâchent. Ils le faisaient, et le bouton
+  // repassait à ⚠️ en pleine séance alors que l'usager n'avait rien demandé —
+  // il fallait éteindre puis rallumer l'option pour récupérer l'écran.
   const wakeLock = new ScreenWakeLock();
   const prefs = loadDevicePrefs();
   const signals = new SessionSignals(prefs);
@@ -767,7 +780,6 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     if (recapOpened) return;
     recapOpened = true;
     timer.pause();
-    void wakeLock.release();
     renderRecapView(steps, ctx, timer.getRecord());
   };
 
@@ -831,6 +843,12 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     const objectif = steps[state.stepIndex]?.sourceStep;
     remaining.textContent =
       !state.done && !state.timed && objectif ? describeStep(objectif) : formatSeconds(state.remaining);
+    // Où l'on en est dans la séance entière : le décompte ne dit que l'étape,
+    // et « il en reste combien » est la question qui vient juste après.
+    const fait = state.done ? steps.length : state.stepIndex;
+    count.textContent = state.done ? "" : `Étape ${fait + 1} / ${steps.length}`;
+    progressFill.style.width = `${(fait / steps.length) * 100}%`;
+
     toggleBtn.disabled = state.done;
     skipBtn.disabled = state.done;
     timerSection.classList.toggle("is-awaiting", state.awaitingReady);
@@ -857,9 +875,11 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
       timer.complete();
     } else if (state.running) {
       timer.pause();
-      void wakeLock.release();
     } else {
       timer.start();
+      // Prendre le verrou, jamais le rendre : l'option peut être active depuis
+      // une séance précédente, et une acquisition demande un geste — ce tap
+      // est le premier de la séance.
       if (prefs.screenOn) void wakeLock.acquire();
     }
   });
@@ -867,7 +887,6 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   resetBtn.addEventListener("click", () => {
     recapOpened = false;
     timer.reset();
-    void wakeLock.release();
   });
   finishBtn.addEventListener("click", openRecap);
 }

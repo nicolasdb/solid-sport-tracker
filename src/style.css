@@ -60,7 +60,27 @@ body {
 }
 
 .lead {
-  color: var(--muted);
+  color: var(--text-secondary);
+  max-width: var(--measure-body);
+}
+
+/* La cadence est une donnée, pas une suite de la phrase d'objectif : sans
+   étiquette ni séparation elle se lisait comme la ligne suivante du même
+   paragraphe. */
+.cadence {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: var(--text-meta);
+  color: var(--text-tertiary);
+}
+
+.cadence .label {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-size: var(--text-micro);
+  margin-right: 0.4rem;
 }
 
 .meta {
@@ -132,25 +152,83 @@ button.ghost {
 ol.blocs {
   list-style: none;
   padding-left: 0;
-  margin: 0 0 1rem;
+  margin: 1rem 0;
 }
 
 li.bloc {
-  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid transparent;
+  /* Le grossissement de l'étape courante doit se voir arriver : à mi-course,
+     l'œil rattrape le déplacement au lieu de chercher ce qui a changé. */
+  transition: font-size 0.25s ease, opacity 0.25s ease, background 0.25s ease;
+}
+
+.bloc-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.bloc-titre {
+  flex: 1;
+}
+
+.bloc-objectif {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bloc-note {
+  font-size: var(--text-meta);
+  color: var(--text-tertiary);
+  margin-top: 0.15rem;
+}
+
+/*
+ * L'étape en cours, à la loupe. Repère visé : la reconnaître d'un coup d'œil
+ * en courant, bras qui bougent, écran à un mètre — le gras seul ne suffisait
+ * pas. Trois signaux redondants plutôt qu'un seul (taille, fond, barre
+ * d'accent), parce qu'aucun n'est fiable au soleil.
+ */
+li.bloc.is-current {
+  font-size: 1.35rem;
+  font-weight: 600;
+  padding: 0.9rem 0.75rem;
+  border-left-color: var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+}
+
+li.bloc.is-current .bloc-note {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* L'étape qu'on vient de finir : barrée sur le titre seul. Barrer aussi la
+   note donnait un pavé rayé illisible, sans rien dire de plus. */
+li.bloc.is-last-done {
+  opacity: 0.55;
+}
+
+li.bloc.is-last-done .bloc-titre {
+  text-decoration: line-through;
+}
+
+li.bloc.is-last-done .bloc-titre::before {
+  content: "✓ ";
+  text-decoration: none;
+  color: var(--accent);
+}
+
+li.bloc.is-last-done .bloc-note {
+  display: none;
 }
 
 li.bloc.is-past {
   opacity: 0.4;
-}
-
-li.bloc.is-last-done {
-  opacity: 0.6;
-  text-decoration: line-through;
-}
-
-li.bloc.is-current {
-  opacity: 1;
-  font-weight: 600;
 }
 
 .timer {
@@ -159,6 +237,27 @@ li.bloc.is-current {
   border-top: 1px solid var(--border);
   background: var(--bg);
   text-align: center;
+}
+
+/* Avancement de la séance entière, en haut de la barre : une ligne, pas un
+   widget — elle est lue du coin de l'œil, jamais fixée. */
+.timer-progress {
+  height: 3px;
+  background: var(--border-subtle);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+#timer-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+#timer-count {
+  font-variant-numeric: tabular-nums;
 }
 
 .timer.is-awaiting #timer-remaining {
