@@ -137,10 +137,22 @@ button.ghost {
   color: var(--muted);
 }
 
+/* Si même raccourci ça déborde, c'est la fin du chemin qui identifie — donc
+   l'ellipse doit manger le début. `direction: rtl` coupe à gauche ; le span
+   isolé remet le texte à l'endroit à l'intérieur. */
 .topbar .webid {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: plaintext;
+}
+
+.pick-lang {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .topbar button {

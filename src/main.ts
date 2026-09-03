@@ -31,6 +31,7 @@ import {
   type TimerState,
 } from "./lib/timer";
 import { ScreenWakeLock } from "./lib/wake-lock";
+import { shortWebId } from "./lib/webid";
 import { applyTheme, loadTheme, nextTheme, THEME_LABELS, type ThemeChoice } from "./lib/theme";
 import {
   applyLang,
@@ -39,7 +40,6 @@ import {
   loadLang,
   nextLang,
   t,
-  type Lang,
 } from "./lib/i18n";
 import { SessionSignals, type SignalKind, type SignalPrefs } from "./lib/signals";
 import {
@@ -52,6 +52,7 @@ import {
 import type { Bloc } from "./vocab/carnet";
 
 const DEFAULT_IDENTIFIER = "https://pod.nicolasdb.eu/";
+
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
 async function main() {
@@ -233,7 +234,7 @@ async function renderApp(webId: string, carnetUrl?: string) {
     <main class="session">
       <header class="topbar">
         <button id="pick-carnet" class="ghost">${t().carnets}</button>
-        <span class="webid">${webId}</span>
+        <span class="webid" title="${webId}">${shortWebId(webId)}</span>
         <button id="logout" class="ghost">${t().logoutShort}</button>
       </header>
       <nav class="tabs">
@@ -368,6 +369,7 @@ async function renderCarnetPickerView(
     <main class="screen">
       <button id="pick-back" class="ghost">${t().back}</button>
       <h1>${t().carnets}</h1>
+      <p class="meta" title="${webId}">${shortWebId(webId)}</p>
       <ol class="blocs" id="carnet-list">
         ${carnetUrls
           .map(
@@ -382,11 +384,24 @@ async function renderCarnetPickerView(
           .join("")}
       </ol>
       <button id="new-carnet" class="ghost">${t().newCarnet}</button>
+      <p class="pick-lang">
+        <button id="opt-lang" class="chip" type="button">${LANG_LABELS[loadLang()]}</button>
+      </p>
     </main>
   `;
 
   document.querySelector<HTMLButtonElement>("#pick-back")!.addEventListener("click", () => {
     renderApp(webId, activeCarnetUrl).catch((err) => renderErrorView(webId, err));
+  });
+  // Changer de langue re-rend l'écran entier — l'app n'a pas de composants, un
+  // rendu détruit ce qu'il remplace. C'est sans conséquence ici, et ce serait
+  // la perte d'une séance en cours depuis la barre du minuteur : d'où sa place
+  // sur cet écran, celui qu'on traverse justement en changeant de carnet.
+  document.querySelector<HTMLButtonElement>("#opt-lang")!.addEventListener("click", () => {
+    applyLang(nextLang(loadLang()));
+    renderCarnetPickerView(webId, podUrl, carnetUrls, activeCarnetUrl).catch((err) =>
+      renderErrorView(webId, err)
+    );
   });
   document.querySelector<HTMLButtonElement>("#new-carnet")!.addEventListener("click", () => {
     renderNewLogbookView(webId, podUrl, () => renderCarnetPickerView(webId, podUrl, carnetUrls, activeCarnetUrl));
@@ -692,7 +707,6 @@ function renderTimerBar(firstDuration: number): string {
         <button id="opt-haptic" class="chip" type="button" aria-pressed="false">${t().optHaptic}</button>
         <button id="opt-screen" class="chip" type="button" aria-pressed="false">${t().optScreen}</button>
         <button id="opt-theme" class="chip" type="button">${THEME_LABELS[loadTheme()]}</button>
-        <button id="opt-lang" class="chip" type="button">${LANG_LABELS[loadLang()]}</button>
       </div>
     </section>
   `;
@@ -760,9 +774,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   const wakeLock = new ScreenWakeLock();
   const prefs = loadDevicePrefs();
   const signals = new SessionSignals(prefs);
-  wireDevicePrefs(prefs, signals, wakeLock, () =>
-    renderApp(ctx.webId, ctx.carnetContainerUrl).catch((err) => renderErrorView(ctx.webId, err))
-  );
+  wireDevicePrefs(prefs, signals, wakeLock);
 
   /**
    * Un signal marque une fin d'étape, mais toutes les fins ne se valent pas :
@@ -906,15 +918,12 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
 function wireDevicePrefs(
   prefs: DevicePrefs,
   signals: SessionSignals,
-  wakeLock: ScreenWakeLock,
-  onLangChange: () => void
+  wakeLock: ScreenWakeLock
 ): void {
   const soundBtn = document.querySelector<HTMLButtonElement>("#opt-sound")!;
   const hapticBtn = document.querySelector<HTMLButtonElement>("#opt-haptic")!;
   const screenBtn = document.querySelector<HTMLButtonElement>("#opt-screen")!;
   const themeBtn = document.querySelector<HTMLButtonElement>("#opt-theme")!;
-  const langBtn = document.querySelector<HTMLButtonElement>("#opt-lang")!;
-  let lang: Lang = loadLang();
   // Tri-état, donc pas de `aria-pressed` : le libellé porte l'état, et c'est
   // aussi ce que l'usager lit en plein soleil.
   let theme: ThemeChoice = loadTheme();
@@ -937,7 +946,6 @@ function wireDevicePrefs(
     const chutes = wakeLock.drops > 0 ? `×${wakeLock.drops}` : "";
     screenBtn.textContent = `${t().optScreen} ${prefs.screenOn ? marque + chutes : ""}`.trim();
     themeBtn.textContent = THEME_LABELS[theme];
-    langBtn.textContent = LANG_LABELS[lang];
   };
   setInterval(paint, 2000);
 
@@ -966,14 +974,6 @@ function wireDevicePrefs(
     theme = nextTheme(theme);
     applyTheme(theme);
     paint();
-  });
-  // La langue re-rend tout l'écran : elle traverse les libellés, pas seulement
-  // ceux d'ici. Une séance en cours est perdue — d'où la place dans les options
-  // plutôt qu'un réglage qu'on effleure, et le tap de confirmation.
-  langBtn.addEventListener("click", () => {
-    lang = nextLang(lang);
-    applyLang(lang);
-    onLangChange();
   });
   soundBtn.addEventListener("click", toggle("sound"));
   hapticBtn.addEventListener("click", toggle("haptic"));

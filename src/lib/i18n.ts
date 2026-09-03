@@ -15,6 +15,8 @@
  * finale est le pod (`preferences.ttl`), avec ce stockage local comme cache
  * pour le temps où le pod n'est pas encore lu. Pas fait.
  */
+import { shortWebId } from "./webid";
+
 export type Lang = "fr" | "en";
 
 const LANG_KEY = "sst:lang";
@@ -27,7 +29,7 @@ const fr = {
   loginIdentifier: "Pod ou WebID",
   loginSubmit: "Se connecter",
 
-  connectedAs: (webId: string) => `Connecté en tant que <code>${webId}</code>.`,
+  connectedAs: (webId: string) => `Connecté en tant que <code title="${webId}">${shortWebId(webId)}</code>.`,
   readingPod: "Lecture du pod…",
   emptyCarnetHint:
     "Le carnet attendu sur ce pod, sous <code>/sport-tracker/carnets/</code>, est peut-être encore vide — voir <code>docs/data-model.md</code> pour la structure attendue.",
@@ -122,7 +124,7 @@ const en: Strings = {
   loginIdentifier: "Pod or WebID",
   loginSubmit: "Sign in",
 
-  connectedAs: (webId: string) => `Signed in as <code>${webId}</code>.`,
+  connectedAs: (webId: string) => `Signed in as <code title="${webId}">${shortWebId(webId)}</code>.`,
   readingPod: "Reading the pod…",
   emptyCarnetHint:
     "The logbook expected on this pod, under <code>/sport-tracker/carnets/</code>, may still be empty — see <code>docs/data-model.md</code> for the expected structure.",
