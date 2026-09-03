@@ -2,7 +2,6 @@ import {
   getSolidDataset,
   getThing,
   getThingAll,
-  getStringNoLocale,
   getUrl,
   getUrlAll,
   getInteger,
@@ -19,6 +18,8 @@ import {
 } from "@inrupt/solid-client";
 import { RDF } from "@inrupt/vocab-common-rdf";
 import { authFetch as fetch } from "./auth";
+import { readLiteral } from "./literal";
+import { t } from "./i18n";
 import {
   st,
   type Bloc,
@@ -90,10 +91,7 @@ export async function getPrimaryPodUrl(webId: string): Promise<string> {
   const storage = await findStorageByLinkHeaders(webId);
   if (storage) return storage;
 
-  throw new Error(
-    "Racine du pod introuvable : ni triple pim:storage dans le profil WebID, " +
-      "ni en-tête Link pim:Storage sur les containers parents."
-  );
+  throw new Error(t().podRootNotFound);
 }
 
 export function trackerContainer(podUrl: string): string {
@@ -136,9 +134,9 @@ export async function readCarnet(carnetContainerUrl: string): Promise<Carnet> {
   }
   return {
     url: carnetContainerUrl,
-    titre: getStringNoLocale(thing, st.titre) ?? "(sans titre)",
-    objectif: getStringNoLocale(thing, st.objectif) ?? undefined,
-    frequence: getStringNoLocale(thing, st.frequence) ?? undefined,
+    titre: readLiteral(thing, st.titre) ?? "(sans titre)",
+    objectif: readLiteral(thing, st.objectif) ?? undefined,
+    frequence: readLiteral(thing, st.frequence) ?? undefined,
     seanceModeleUrl: getUrl(thing, st.seanceModele) ?? undefined,
   };
 }
@@ -165,15 +163,15 @@ export async function readSeanceModele(modeleUrl: string): Promise<SeanceModele>
         .map((exUrl) => getThing(dataset, exUrl))
         .filter((t): t is NonNullable<typeof t> => t !== null)
         .map((t) => ({
-          titre: getStringNoLocale(t, st.titre) ?? "(sans titre)",
-          repetitions: getStringNoLocale(t, st.repetitions) ?? undefined,
+          titre: readLiteral(t, st.titre) ?? "(sans titre)",
+          repetitions: readLiteral(t, st.repetitions) ?? undefined,
           dureeSecondes: getInteger(t, st.dureeSecondes) ?? undefined,
-          note: getStringNoLocale(t, st.note) ?? undefined,
+          note: readLiteral(t, st.note) ?? undefined,
         }));
 
       return {
         url: blocUrl,
-        titre: getStringNoLocale(blocThing, st.titre) ?? "(sans titre)",
+        titre: readLiteral(blocThing, st.titre) ?? "(sans titre)",
         ordre: getInteger(blocThing, st.ordre) ?? 0,
         dureeSecondes: getInteger(blocThing, st.dureeSecondes) ?? 0,
         exercices,
@@ -184,7 +182,7 @@ export async function readSeanceModele(modeleUrl: string): Promise<SeanceModele>
 
   return {
     url: modeleUrl,
-    titre: getStringNoLocale(root, st.titre) ?? "(sans titre)",
+    titre: readLiteral(root, st.titre) ?? "(sans titre)",
     blocs,
   };
 }
@@ -206,7 +204,7 @@ export async function readPreferences(podUrl: string): Promise<Preferences> {
   }
   return {
     carnetActifUrl: getUrl(thing, st.carnetActif) ?? undefined,
-    tenueParDefaut: getStringNoLocale(thing, st.tenueParDefaut) ?? undefined,
+    tenueParDefaut: readLiteral(thing, st.tenueParDefaut) ?? undefined,
     afficherTimer: getInteger(thing, st.afficherTimer) !== 0,
   };
 }
@@ -372,18 +370,18 @@ export function describePodError(err: unknown): string {
   if (!(err instanceof FetchError)) {
     return err instanceof Error ? err.message : String(err);
   }
-  const url = err.message.match(/at \[([^\]]+)\]/)?.[1] ?? "ressource inconnue";
+  const url = err.message.match(/at \[([^\]]+)\]/)?.[1] ?? t().unknownResource;
   // 401 et 403 n'ont pas le même remède : un 401 dit « je ne sais pas qui tu
   // es » (jeton expiré, il faut se reconnecter), un 403 dit « je sais qui tu
   // es et c'est non » — se reconnecter n'y changera rien. Les confondre envoie
   // chercher une session expirée là où il manque une autorisation.
   if (err.statusCode === 401) {
-    return `Non authentifié (401) sur ${url} — session expirée, reconnecte-toi.`;
+    return t().err401(url);
   }
   if (err.statusCode === 403) {
-    return `Accès refusé (403) sur ${url} — ton identité est reconnue mais n'a pas les droits ici. C'est le cas d'un WebID d'agent, qui ne reçoit des droits que sur les containers qu'on lui a explicitement accordés, pas à la racine du pod.`;
+    return t().err403(url);
   }
-  return `Échec (${err.statusCode}) sur ${url}.`;
+  return t().errOther(err.statusCode, url);
 }
 
 export function seancesContainer(carnetContainerUrl: string): string {
@@ -516,7 +514,7 @@ export async function readSeance(docUrl: string): Promise<SeanceInstance> {
       return {
         url,
         baseSurBlocUrl: getUrl(thing, st.baseSurBloc) ?? undefined,
-        titre: getStringNoLocale(thing, st.titre) ?? "(sans titre)",
+        titre: readLiteral(thing, st.titre) ?? "(sans titre)",
         complete: getInteger(thing, st.complete) === 1,
         dureeReelleSecondes: getInteger(thing, st.dureeReelleSecondes) ?? 0,
       };
@@ -531,7 +529,7 @@ export async function readSeance(docUrl: string): Promise<SeanceInstance> {
     modeleUrl: getUrl(root, st.baseSurModele) ?? undefined,
     dateRealisation: getDatetime(root, st.dateRealisation) ?? undefined,
     dureeReelleSecondes: getInteger(root, st.dureeReelleSecondes) ?? 0,
-    ressenti: getStringNoLocale(root, st.ressenti) ?? undefined,
+    ressenti: readLiteral(root, st.ressenti) ?? undefined,
     blocs,
   };
 }

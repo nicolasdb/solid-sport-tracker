@@ -6,7 +6,6 @@ import {
   getDatetime,
   getInteger,
   getSolidDataset,
-  getStringNoLocale,
   getThing,
   getThingAll,
   getUrl,
@@ -19,6 +18,7 @@ import {
 } from "@inrupt/solid-client";
 import { RDF } from "@inrupt/vocab-common-rdf";
 import { authFetch } from "./auth";
+import { readLiteral } from "./literal";
 import { carnetsContainer, ensureTrackerScaffold } from "./pod";
 import {
   act,
@@ -80,7 +80,7 @@ function readPhases(dataset: SolidDataset, stepThing: Thing): Phase[] {
     .filter((t): t is Thing => t !== null)
     .sort((a, b) => orderOf(a) - orderOf(b))
     .map((t) => ({
-      title: getStringNoLocale(t, act.title) ?? "",
+      title: readLiteral(t, act.title) ?? "",
       seconds: getInteger(t, act.targetSeconds) ?? 0,
     }));
 }
@@ -90,8 +90,8 @@ function readStep(dataset: SolidDataset, url: string): Step | null {
   if (!thing) return null;
 
   const types = getUrlAll(thing, RDF_TYPE);
-  const title = getStringNoLocale(thing, act.title) ?? "(sans titre)";
-  const note = getStringNoLocale(thing, act.note) ?? undefined;
+  const title = readLiteral(thing, act.title) ?? "(sans titre)";
+  const note = readLiteral(thing, act.note) ?? undefined;
   const common = { url, title, note };
 
   if (types.includes(act.RepeatStep)) {
@@ -115,7 +115,7 @@ function readStep(dataset: SolidDataset, url: string): Step | null {
       kind: "counted",
       ...common,
       targetCount: getInteger(thing, act.targetCount) ?? 0,
-      unit: getStringNoLocale(thing, act.unit) ?? undefined,
+      unit: readLiteral(thing, act.unit) ?? undefined,
     };
   }
   if (types.includes(act.TimedStep)) {
@@ -167,9 +167,9 @@ export async function readProtocol(uri: string): Promise<Protocol> {
   }
   return {
     url: root.url,
-    title: getStringNoLocale(root, act.title) ?? "(sans titre)",
-    goal: getStringNoLocale(root, act.goal) ?? undefined,
-    cadence: getStringNoLocale(root, act.cadence) ?? undefined,
+    title: readLiteral(root, act.title) ?? "(sans titre)",
+    goal: readLiteral(root, act.goal) ?? undefined,
+    cadence: readLiteral(root, act.cadence) ?? undefined,
     steps: readSteps(dataset, root),
   };
 }
@@ -325,9 +325,9 @@ export async function readLogbook(logbookContainerUrl: string): Promise<Logbook 
   if (!thing) return null;
   return {
     url: logbookContainerUrl,
-    title: getStringNoLocale(thing, act.title) ?? "(sans titre)",
-    goal: getStringNoLocale(thing, act.goal) ?? undefined,
-    cadence: getStringNoLocale(thing, act.cadence) ?? undefined,
+    title: readLiteral(thing, act.title) ?? "(sans titre)",
+    goal: readLiteral(thing, act.goal) ?? undefined,
+    cadence: readLiteral(thing, act.cadence) ?? undefined,
     protocolUrl: getUrl(thing, act.protocol) ?? undefined,
     sourceProtocolUrl: getUrl(thing, act.sourceProtocol) ?? undefined,
   };
@@ -412,7 +412,7 @@ export async function readSession(docUrl: string): Promise<Session> {
     .map((t) => ({
       url: t.url,
       ofStepUrl: getUrl(t, act.ofStep) ?? undefined,
-      title: getStringNoLocale(t, act.title) ?? "(sans titre)",
+      title: readLiteral(t, act.title) ?? "(sans titre)",
       completed: (getInteger(t, act.completed) ?? 0) !== 0,
       durationSeconds: getInteger(t, act.durationSeconds) ?? 0,
     }))
@@ -425,7 +425,7 @@ export async function readSession(docUrl: string): Promise<Session> {
     protocolUrl: getUrl(root, act.protocol) ?? undefined,
     startedAt: getDatetime(root, act.startedAt) ?? undefined,
     durationSeconds: getInteger(root, act.durationSeconds) ?? 0,
-    feeling: getStringNoLocale(root, act.feeling) ?? undefined,
+    feeling: readLiteral(root, act.feeling) ?? undefined,
     runs,
   };
 }

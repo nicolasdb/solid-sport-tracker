@@ -1,3 +1,4 @@
+import { t } from "../lib/i18n";
 /**
  * Vocabulaire généralisé de l'app : un protocole (« recette ») est une suite
  * d'étapes typées, indépendante du domaine sportif.
@@ -294,6 +295,6 @@ export function describeStep(step: Step): string {
     case "checklist":
       return "";
     case "repeat":
-      return `${step.times} tours`;
+      return t().rounds(step.times);
   }
 }

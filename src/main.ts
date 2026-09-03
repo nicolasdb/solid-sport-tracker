@@ -32,6 +32,15 @@ import {
 } from "./lib/timer";
 import { ScreenWakeLock } from "./lib/wake-lock";
 import { applyTheme, loadTheme, nextTheme, THEME_LABELS, type ThemeChoice } from "./lib/theme";
+import {
+  applyLang,
+  dateLocale,
+  LANG_LABELS,
+  loadLang,
+  nextLang,
+  t,
+  type Lang,
+} from "./lib/i18n";
 import { SessionSignals, type SignalKind, type SignalPrefs } from "./lib/signals";
 import {
   countUnrecognized,
@@ -49,6 +58,7 @@ async function main() {
   // Avant tout rendu : sinon le premier écran s'affiche dans le mauvais thème
   // le temps d'un aller-retour réseau.
   applyTheme(loadTheme());
+  applyLang(loadLang());
   await completeLogin();
   const session = getSession();
 
@@ -69,11 +79,11 @@ function renderLoginView(message?: string) {
   app.innerHTML = `
     <main class="screen">
       <h1>Solid Sport Tracker</h1>
-      <p class="lead">Connecte-toi avec l'adresse de ton pod, ou avec ton WebID si tu ne connais pas son fournisseur — il sera alors découvert depuis ton profil.</p>
+      <p class="lead">${t().loginLead}</p>
       <form id="login-form">
-        <label for="identifier">Pod ou WebID</label>
+        <label for="identifier">${t().loginIdentifier}</label>
         <input id="identifier" name="identifier" type="url" value="${DEFAULT_IDENTIFIER}" required />
-        <button type="submit">Se connecter</button>
+        <button type="submit">${t().loginSubmit}</button>
       </form>
       ${message ? `<p class="error">${message}</p>` : ""}
     </main>
@@ -94,7 +104,7 @@ function renderLoginView(message?: string) {
 function renderLoadingView(webId: string) {
   app.innerHTML = `
     <main class="screen">
-      <p class="lead">Connecté en tant que <code>${webId}</code>. Lecture du pod…</p>
+      <p class="lead">${t().connectedAs(webId)} ${t().readingPod}</p>
     </main>
   `;
 }
@@ -103,10 +113,10 @@ function renderErrorView(webId: string, err: unknown) {
   const msg = describePodError(err);
   app.innerHTML = `
     <main class="screen">
-      <p class="lead">Connecté en tant que <code>${webId}</code>.</p>
+      <p class="lead">${t().connectedAs(webId)}</p>
       <p class="error">${msg}</p>
-      <p>Le carnet attendu sur ce pod, sous <code>/sport-tracker/carnets/</code>, est peut-être encore vide — voir <code>docs/data-model.md</code> pour la structure attendue.</p>
-      <button id="logout">Se déconnecter</button>
+      <p>${t().emptyCarnetHint}</p>
+      <button id="logout">${t().logout}</button>
     </main>
   `;
   document.querySelector<HTMLButtonElement>("#logout")!.addEventListener("click", async () => {
@@ -222,38 +232,37 @@ async function renderApp(webId: string, carnetUrl?: string) {
   app.innerHTML = `
     <main class="session">
       <header class="topbar">
-        <button id="pick-carnet" class="ghost">Carnets</button>
+        <button id="pick-carnet" class="ghost">${t().carnets}</button>
         <span class="webid">${webId}</span>
-        <button id="logout" class="ghost">Déconnexion</button>
+        <button id="logout" class="ghost">${t().logoutShort}</button>
       </header>
       <nav class="tabs">
-        <button id="tab-seance" class="tab is-active">Séance</button>
-        <button id="tab-historique" class="tab">Historique</button>
+        <button id="tab-seance" class="tab is-active">${t().tabSeance}</button>
+        <button id="tab-historique" class="tab">${t().tabHistorique}</button>
       </nav>
       <div class="session-scroll" id="view-seance">
         ${
           hasDraft
-            ? `<p class="banner">Séance non enregistrée en attente.
-                 <button id="resume-recap" class="ghost">Reprendre</button></p>`
+            ? `<p class="banner">${t().draftPending}
+                 <button id="resume-recap" class="ghost">${t().resume}</button></p>`
             : ""
         }
         ${
           unrecognized > 0
-            ? `<p class="banner">${unrecognized} étape(s) de type non reconnu, exécutée(s)
-                 comme simple validation.</p>`
+            ? `<p class="banner">${t().unrecognized(unrecognized)}</p>`
             : ""
         }
         <h1>${programme.titre}</h1>
         ${programme.objectif ? `<p class="lead">${programme.objectif}</p>` : ""}
         ${
           programme.cadence
-            ? `<p class="cadence"><span class="label">Fréquence</span> ${programme.cadence}</p>`
+            ? `<p class="cadence"><span class="label">${t().cadenceLabel}</span> ${programme.cadence}</p>`
             : ""
         }
         ${
           runnable.length
             ? `<ol class="blocs">${runnable.map(renderRunnable).join("")}</ol>`
-            : `<p>Ce carnet n'a pas encore d'étapes exécutables.</p>`
+            : `<p>${t().noRunnableSteps}</p>`
         }
       </div>
       <div class="session-scroll" id="view-historique" hidden></div>
@@ -300,24 +309,18 @@ async function renderApp(webId: string, carnetUrl?: string) {
 function renderNewLogbookView(webId: string, podUrl: string, onCancel?: () => void) {
   app.innerHTML = `
     <main class="screen">
-      <p class="lead">Connecté en tant que <code>${webId}</code>.</p>
-      <p>${
-        onCancel
-          ? "Adresse d'une nouvelle recette à ouvrir en carnet."
-          : "Aucun carnet sur ce pod. Rien n'y a été écrit : ouvrir un carnet est la première écriture, et elle t'appartient."
-      }</p>
+      <p class="lead">${t().connectedAs(webId)}</p>
+      <p>${onCancel ? t().newFromPicker : t().newFirstCarnet}</p>
       <form id="new-logbook">
-        <label for="recette">Adresse de la recette</label>
+        <label for="recette">${t().recipeAddress}</label>
         <input id="recette" name="recette" type="url" value="${RECETTE_EXEMPLE}" required />
-        <p class="meta">La recette est copiée dans ton carnet ; son adresse d'origine
-          est conservée comme provenance, sans lien vivant.</p>
-        <p class="meta">Créera <code>${carnetsContainer(podUrl)}</code> et un container
-          par carnet en dessous.</p>
+        <p class="meta">${t().copyNote}</p>
+        <p class="meta">${t().willCreate(carnetsContainer(podUrl))}</p>
         <p class="error" id="new-error" hidden></p>
-        <button type="submit" id="new-submit">Ouvrir le carnet</button>
-        ${onCancel ? `<button type="button" id="new-cancel" class="ghost">Annuler</button>` : ""}
+        <button type="submit" id="new-submit">${t().openCarnet}</button>
+        ${onCancel ? `<button type="button" id="new-cancel" class="ghost">${t().cancel}</button>` : ""}
       </form>
-      ${onCancel ? "" : `<button id="logout" class="ghost">Se déconnecter</button>`}
+      ${onCancel ? "" : `<button id="logout" class="ghost">${t().logout}</button>`}
     </main>
   `;
 
@@ -327,7 +330,7 @@ function renderNewLogbookView(webId: string, podUrl: string, onCancel?: () => vo
     const errorEl = document.querySelector<HTMLParagraphElement>("#new-error")!;
     const uri = document.querySelector<HTMLInputElement>("#recette")!.value.trim();
     btn.disabled = true;
-    btn.textContent = "Création en cours…";
+    btn.textContent = t().creating;
     errorEl.hidden = true;
     try {
       const logbookUrl = await createLogbookFromProtocol(podUrl, uri);
@@ -337,7 +340,7 @@ function renderNewLogbookView(webId: string, podUrl: string, onCancel?: () => vo
       errorEl.textContent = describePodError(err);
       errorEl.hidden = false;
       btn.disabled = false;
-      btn.textContent = "Ouvrir le carnet";
+      btn.textContent = t().openCarnet;
     }
   });
 
@@ -363,8 +366,8 @@ async function renderCarnetPickerView(
 ) {
   app.innerHTML = `
     <main class="screen">
-      <button id="pick-back" class="ghost">← Retour</button>
-      <h1>Carnets</h1>
+      <button id="pick-back" class="ghost">${t().back}</button>
+      <h1>${t().carnets}</h1>
       <ol class="blocs" id="carnet-list">
         ${carnetUrls
           .map(
@@ -372,13 +375,13 @@ async function renderCarnetPickerView(
           <li class="bloc${url === activeCarnetUrl ? " is-current" : ""}">
             <span>…</span>
             <button data-carnet="${url}" ${url === activeCarnetUrl ? "disabled" : ""}>
-              ${url === activeCarnetUrl ? "Actif" : "Ouvrir"}
+              ${url === activeCarnetUrl ? t().active : t().open}
             </button>
           </li>`
           )
           .join("")}
       </ol>
-      <button id="new-carnet" class="ghost">Nouveau carnet</button>
+      <button id="new-carnet" class="ghost">${t().newCarnet}</button>
     </main>
   `;
 
@@ -393,7 +396,7 @@ async function renderCarnetPickerView(
     btn.addEventListener("click", async () => {
       const url = btn.dataset.carnet!;
       btn.disabled = true;
-      btn.textContent = "Ouverture…";
+      btn.textContent = t().opening;
       try {
         await setActiveCarnet(podUrl, url);
         await renderApp(webId, url);
@@ -415,7 +418,7 @@ async function renderCarnetPickerView(
       .catch(() => {
         const item = document.querySelectorAll<HTMLLIElement>("#carnet-list li")[i];
         const span = item?.querySelector("span");
-        if (span) span.textContent = "(carnet illisible)";
+        if (span) span.textContent = t().unreadableCarnet;
       });
   });
 }
@@ -471,7 +474,7 @@ function currentStreak(days: Set<string>): number {
 }
 
 async function loadHistorique(container: HTMLElement, ctx: SeanceContext) {
-  container.innerHTML = `<p class="lead">Lecture de l'historique…</p>`;
+  container.innerHTML = `<p class="lead">${t().loadingHistory}</p>`;
   try {
     // Les deux emplacements coexistent : `seances/` pour les carnets écrits
     // avant les étapes typées, `sessions/` depuis. Le calendrier les fusionne
@@ -482,7 +485,7 @@ async function loadHistorique(container: HTMLElement, ctx: SeanceContext) {
     ]);
     const urls = [...anciennes, ...nouvelles];
     if (urls.length === 0) {
-      container.innerHTML = `<p class="lead">Aucune séance enregistrée pour l'instant.</p>`;
+      container.innerHTML = `<p class="lead">${t().noSeance}</p>`;
       return;
     }
 
@@ -499,11 +502,6 @@ async function loadHistorique(container: HTMLElement, ctx: SeanceContext) {
     container.innerHTML = `<p class="error">${describePodError(err)}</p>`;
   }
 }
-
-const MOIS = [
-  "janvier", "février", "mars", "avril", "mai", "juin",
-  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
-];
 
 function renderHistorique(
   container: HTMLElement,
@@ -545,16 +543,16 @@ function renderHistorique(
 
   container.innerHTML = `
     <div class="streak">
-      <strong>${streak}</strong> jour${streak > 1 ? "s" : ""} d'affilée
-      <span class="meta">· ${totalSeances} séance${totalSeances > 1 ? "s" : ""} au total</span>
+      <strong>${streak}</strong> ${t().streak(streak)}
+      <span class="meta">· ${t().totalSeances(totalSeances)}</span>
     </div>
     <div class="cal-head">
       <button id="cal-prev" class="ghost">‹</button>
-      <span>${MOIS[monthIndex]} ${year} <span class="meta">· ${monthSeances}</span></span>
+      <span>${t().months[monthIndex]} ${year} <span class="meta">· ${monthSeances}</span></span>
       <button id="cal-next" class="ghost">›</button>
     </div>
     <div class="cal-grid">
-      ${["L", "M", "M", "J", "V", "S", "D"].map((d) => `<span class="dow">${d}</span>`).join("")}
+      ${t().weekdays.map((d) => `<span class="dow">${d}</span>`).join("")}
       ${cells.join("")}
     </div>
     <div id="seance-detail"></div>
@@ -614,7 +612,7 @@ async function readSeanceQuelquesoitLeFormat(url: string): Promise<SeanceLue> {
 /** Un jour peut porter plusieurs séances : on les affiche toutes, dans l'ordre. */
 async function showSeanceDetail(urls: string[]) {
   const panel = document.querySelector<HTMLElement>("#seance-detail")!;
-  panel.innerHTML = `<p class="lead">Lecture…</p>`;
+  panel.innerHTML = `<p class="lead">${t().reading}</p>`;
   try {
     const seances = await Promise.all(urls.map(readSeanceQuelquesoitLeFormat));
     // Les noms de fichiers ne se trient pas chronologiquement (`<date>.ttl`
@@ -624,12 +622,12 @@ async function showSeanceDetail(urls: string[]) {
     panel.innerHTML = seances
       .map((seance) => {
         const titre = seance.date
-          ? seance.date.toLocaleString("fr-FR", { dateStyle: "full", timeStyle: "short" })
-          : "Séance";
+          ? seance.date.toLocaleString(dateLocale(), { dateStyle: "full", timeStyle: "short" })
+          : t().seance;
         return `
         <section class="detail">
           <h3>${titre}</h3>
-          <p class="meta">Durée réelle : ${formatSeconds(seance.dureeSecondes)}</p>
+          <p class="meta">${t().realDuration} ${formatSeconds(seance.dureeSecondes)}</p>
           <ul class="detail-blocs">
             ${seance.etapes
               .map(
@@ -677,23 +675,24 @@ function renderTimerBar(firstDuration: number): string {
     <section id="timer" class="timer">
       <div class="timer-progress" aria-hidden="true"><div id="timer-progress-fill"></div></div>
       <div class="timer-display">
-        <span id="timer-label">Prêt</span>
+        <span id="timer-label">${t().timerReady}</span>
         <span id="timer-remaining">${formatSeconds(firstDuration)}</span>
         <span id="timer-count" class="meta"></span>
       </div>
       <div class="timer-controls">
-        <button id="timer-toggle">Démarrer</button>
+        <button id="timer-toggle">${t().timerStart}</button>
       </div>
       <div class="timer-controls secondary">
-        <button id="timer-skip" class="ghost">Passer</button>
-        <button id="timer-reset" class="ghost">Réinit.</button>
-        <button id="timer-finish" class="ghost">Terminer</button>
+        <button id="timer-skip" class="ghost">${t().timerSkip}</button>
+        <button id="timer-reset" class="ghost">${t().timerReset}</button>
+        <button id="timer-finish" class="ghost">${t().timerFinish}</button>
       </div>
       <div class="timer-toggles">
-        <button id="opt-sound" class="chip" type="button" aria-pressed="false">🔊 Bip</button>
-        <button id="opt-haptic" class="chip" type="button" aria-pressed="false">📳 Vibration</button>
-        <button id="opt-screen" class="chip" type="button" aria-pressed="false">🔆 Écran</button>
-        <button id="opt-theme" class="chip" type="button">☀️ Clair</button>
+        <button id="opt-sound" class="chip" type="button" aria-pressed="false">${t().optSound}</button>
+        <button id="opt-haptic" class="chip" type="button" aria-pressed="false">${t().optHaptic}</button>
+        <button id="opt-screen" class="chip" type="button" aria-pressed="false">${t().optScreen}</button>
+        <button id="opt-theme" class="chip" type="button">${THEME_LABELS[loadTheme()]}</button>
+        <button id="opt-lang" class="chip" type="button">${LANG_LABELS[loadLang()]}</button>
       </div>
     </section>
   `;
@@ -761,7 +760,9 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   const wakeLock = new ScreenWakeLock();
   const prefs = loadDevicePrefs();
   const signals = new SessionSignals(prefs);
-  wireDevicePrefs(prefs, signals, wakeLock);
+  wireDevicePrefs(prefs, signals, wakeLock, () =>
+    renderApp(ctx.webId, ctx.carnetContainerUrl).catch((err) => renderErrorView(ctx.webId, err))
+  );
 
   /**
    * Un signal marque une fin d'étape, mais toutes les fins ne se valent pas :
@@ -824,20 +825,20 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     signalTransitions(state);
 
     if (state.done) {
-      label.textContent = "Séance terminée !";
-      toggleBtn.textContent = "Démarrer";
+      label.textContent = t().timerFinished;
+      toggleBtn.textContent = t().timerStart;
       // Dernier bloc fini : on bascule directement sur le récapitulatif.
       queueMicrotask(openRecap);
     } else if (state.awaitingReady) {
-      label.textContent = `Prêt pour : ${state.step?.label ?? ""} ?`;
-      toggleBtn.textContent = "Je suis prêt";
+      label.textContent = t().timerReadyFor(state.step?.label ?? "");
+      toggleBtn.textContent = t().timerImReady;
     } else if (!state.timed && state.running) {
       // Étape comptée ou checklist : rien à décompter, c'est l'usager qui clôt.
-      label.textContent = state.step?.label ?? "Prêt";
-      toggleBtn.textContent = "C'est fait";
+      label.textContent = state.step?.label ?? t().timerReady;
+      toggleBtn.textContent = t().timerDone;
     } else {
-      label.textContent = state.step?.label ?? "Prêt";
-      toggleBtn.textContent = state.running ? "Pause" : "Démarrer";
+      label.textContent = state.step?.label ?? t().timerReady;
+      toggleBtn.textContent = state.running ? t().timerPause : t().timerStart;
     }
 
     const objectif = steps[state.stepIndex]?.sourceStep;
@@ -846,7 +847,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     // Où l'on en est dans la séance entière : le décompte ne dit que l'étape,
     // et « il en reste combien » est la question qui vient juste après.
     const fait = state.done ? steps.length : state.stepIndex;
-    count.textContent = state.done ? "" : `Étape ${fait + 1} / ${steps.length}`;
+    count.textContent = state.done ? "" : t().stepCount(fait + 1, steps.length);
     progressFill.style.width = `${(fait / steps.length) * 100}%`;
 
     toggleBtn.disabled = state.done;
@@ -905,12 +906,15 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
 function wireDevicePrefs(
   prefs: DevicePrefs,
   signals: SessionSignals,
-  wakeLock: ScreenWakeLock
+  wakeLock: ScreenWakeLock,
+  onLangChange: () => void
 ): void {
   const soundBtn = document.querySelector<HTMLButtonElement>("#opt-sound")!;
   const hapticBtn = document.querySelector<HTMLButtonElement>("#opt-haptic")!;
   const screenBtn = document.querySelector<HTMLButtonElement>("#opt-screen")!;
   const themeBtn = document.querySelector<HTMLButtonElement>("#opt-theme")!;
+  const langBtn = document.querySelector<HTMLButtonElement>("#opt-lang")!;
+  let lang: Lang = loadLang();
   // Tri-état, donc pas de `aria-pressed` : le libellé porte l'état, et c'est
   // aussi ce que l'usager lit en plein soleil.
   let theme: ThemeChoice = loadTheme();
@@ -921,6 +925,8 @@ function wireDevicePrefs(
   if (!wakeLock.supported) screenBtn.hidden = true;
 
   const paint = () => {
+    soundBtn.textContent = t().optSound;
+    hapticBtn.textContent = t().optHaptic;
     soundBtn.setAttribute("aria-pressed", String(prefs.sound));
     hapticBtn.setAttribute("aria-pressed", String(prefs.haptic));
     screenBtn.setAttribute("aria-pressed", String(prefs.screenOn));
@@ -929,8 +935,9 @@ function wireDevicePrefs(
     // vérifie. Sondé, faute d'événement quand le verrou tombe côté vidéo.
     const marque = { native: "🔒", video: "🎞", off: "⚠️" }[wakeLock.status];
     const chutes = wakeLock.drops > 0 ? `×${wakeLock.drops}` : "";
-    screenBtn.textContent = `🔆 Écran ${prefs.screenOn ? marque + chutes : ""}`.trim();
+    screenBtn.textContent = `${t().optScreen} ${prefs.screenOn ? marque + chutes : ""}`.trim();
     themeBtn.textContent = THEME_LABELS[theme];
+    langBtn.textContent = LANG_LABELS[lang];
   };
   setInterval(paint, 2000);
 
@@ -959,6 +966,14 @@ function wireDevicePrefs(
     theme = nextTheme(theme);
     applyTheme(theme);
     paint();
+  });
+  // La langue re-rend tout l'écran : elle traverse les libellés, pas seulement
+  // ceux d'ici. Une séance en cours est perdue — d'où la place dans les options
+  // plutôt qu'un réglage qu'on effleure, et le tap de confirmation.
+  langBtn.addEventListener("click", () => {
+    lang = nextLang(lang);
+    applyLang(lang);
+    onLangChange();
   });
   soundBtn.addEventListener("click", toggle("sound"));
   hapticBtn.addEventListener("click", toggle("haptic"));
@@ -1061,12 +1076,12 @@ function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: Sess
 
   app.innerHTML = `
     <main class="screen">
-      <h1>Séance terminée</h1>
+      <h1>${t().recapTitle}</h1>
       <p class="lead">${ctx.carnetTitre}</p>
-      ${restored ? `<p class="meta">Séance non enregistrée, restaurée depuis ce navigateur.</p>` : ""}
+      ${restored ? `<p class="meta">${t().recapRestored}</p>` : ""}
       <form id="recap-form">
         <fieldset class="recap-blocs">
-          <legend>Étapes réalisées</legend>
+          <legend>${t().recapSteps}</legend>
           ${rows
             .map(
               (r, i) => `
@@ -1078,13 +1093,13 @@ function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: Sess
             )
             .join("")}
         </fieldset>
-        <label for="duree">Durée réelle (minutes)</label>
+        <label for="duree">${t().recapDuration}</label>
         <input id="duree" name="duree" type="number" min="0" value="${minutes}" />
-        <label for="ressenti">Ressenti</label>
-        <textarea id="ressenti" name="ressenti" rows="3" placeholder="Fatigue, gêne, intensité…">${ressentiValue}</textarea>
+        <label for="ressenti">${t().recapFeeling}</label>
+        <textarea id="ressenti" name="ressenti" rows="3" placeholder="${t().recapFeelingHint}">${ressentiValue}</textarea>
         <p class="error" id="recap-error" hidden></p>
-        <button type="submit" id="recap-save">Enregistrer sur le pod</button>
-        <button type="button" id="recap-discard" class="ghost">Ne pas enregistrer</button>
+        <button type="submit" id="recap-save">${t().recapSave}</button>
+        <button type="button" id="recap-discard" class="ghost">${t().recapDiscard}</button>
       </form>
     </main>
   `;
@@ -1127,7 +1142,7 @@ function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: Sess
     const { complete, minutes: m, ressenti } = readForm();
 
     saveBtn.disabled = true;
-    saveBtn.textContent = "Enregistrement…";
+    saveBtn.textContent = t().recapSaving;
     errorEl.hidden = true;
     try {
       const duree = Math.max(0, Math.round(m * 60));
@@ -1165,11 +1180,11 @@ function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: Sess
     } catch (err) {
       // La séance reste dans le brouillon : on ne perd rien en échouant ici.
       errorEl.textContent = isAuthError(err)
-        ? `${describePodError(err)} La séance est gardée en local et te sera reproposée.`
+        ? `${describePodError(err)} ${t().recapKeptLocally}`
         : describePodError(err);
       errorEl.hidden = false;
       saveBtn.disabled = false;
-      saveBtn.textContent = "Enregistrer sur le pod";
+      saveBtn.textContent = t().recapSave;
     }
   });
 }

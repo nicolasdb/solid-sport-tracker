@@ -143,6 +143,22 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   before any render, otherwise the first screen flashes the wrong ground. It is
   a device preference like sound and screen-wake (bright sun outdoors vs a dark
   room), so `localStorage`, not the pod.
+- `src/lib/i18n.ts` — UI language, `fr`/`en`. **It follows the user, never the
+  recipe.** A recipe written in English opened by a French speaker keeps its
+  step titles in English — that is its content — while the buttons stay French;
+  tying the two would make the app change language as carnets are opened. The
+  English dictionary is typed as `Strings` (the exact shape of the French one),
+  so a missing key is a compile error rather than a French word surfacing three
+  screens later. `applyLang` also stamps `<html lang>`, which is what a screen
+  reader and hyphenation go by.
+- `src/lib/literal.ts` — `readLiteral`, and the reason it exists:
+  `getStringNoLocale` returns **null** for a language-tagged literal. Every
+  recipe written so far is untagged, so everything works — but the day the
+  recipe-author skill starts emitting `act:title "…"@fr`, every title would go
+  blank at once. The reader had to learn both *before* the writer changes.
+  Order: UI language, then untagged, then `en`/`fr` as a last resort — a title
+  in the wrong language beats an empty line. All of `pod.ts` and
+  `protocol-pod.ts` read through it; `getStringNoLocale` should not reappear.
 - `src/lib/wake-lock.ts` — `ScreenWakeLock`, keeps the screen on during a
   session. The browser drops the lock whenever the page is hidden, hence
   `reacquire()` on `visibilitychange`. Two routes to the *same* OS sleep
