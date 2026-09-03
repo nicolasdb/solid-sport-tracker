@@ -194,12 +194,35 @@ li.bloc {
  * d'accent), parce qu'aucun n'est fiable au soleil.
  */
 li.bloc.is-current {
+  position: relative;
   font-size: 1.35rem;
   font-weight: 600;
   padding: 0.9rem 0.75rem;
-  border-left-color: var(--accent);
+  border-left-color: transparent;
   border-radius: var(--radius-lg);
   background: var(--surface-elevated);
+}
+
+/*
+ * La barre d'accent se vide avec l'étape : l'avancement se prend en vision
+ * périphérique, sans lire les chiffres — ce que le décompte ne permet pas quand
+ * on court. `--bloc-fill` est posé par le minuteur ; à 0 % la barre est pleine,
+ * elle se creuse par le haut. Sans transition : elle est repeinte quatre fois
+ * par seconde, une animation la ferait traîner derrière l'horloge.
+ */
+li.bloc.is-current::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    to bottom,
+    var(--accent-line) var(--bloc-fill, 0%),
+    var(--accent) var(--bloc-fill, 0%)
+  );
 }
 
 li.bloc.is-current .bloc-note {
@@ -231,11 +254,14 @@ li.bloc.is-past {
   opacity: 0.4;
 }
 
+/* La barre se détache du programme qui défile derrière : c'est la seule zone
+   qui ne bouge pas, et elle porte les commandes qu'on cherche sans regarder. */
 .timer {
   flex: none;
-  padding: 1rem 0 calc(1rem + env(safe-area-inset-bottom));
+  padding: 1rem 0.75rem calc(1rem + env(safe-area-inset-bottom));
+  margin: 0 -0.75rem;
   border-top: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface-elevated);
   text-align: center;
 }
 

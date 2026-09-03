@@ -858,6 +858,12 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     blocItems.forEach((item, index) => {
       const offset = index - state.stepIndex;
       item.classList.toggle("is-current", !state.done && offset === 0);
+      if (offset === 0) {
+        // Étape non chronométrée : rien ne s'écoule, la barre reste pleine.
+        const total = state.step?.seconds ?? 0;
+        const ecoule = total > 0 ? (total - state.remaining) / total : 0;
+        item.style.setProperty("--bloc-fill", `${Math.min(100, Math.max(0, ecoule * 100))}%`);
+      }
       item.classList.toggle("is-last-done", !state.done && offset === -1);
       item.classList.toggle("is-past", !state.done && offset < -1);
       item.classList.toggle("is-far", !state.done && offset > LOOKAHEAD);
