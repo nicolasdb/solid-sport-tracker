@@ -1,0 +1,258 @@
+/*──────────────────────────────────────────────────────────────
+  THEME — fills the slots core.css declares.
+
+  Palette: the pod design system's "daylight" (light) and "ink"
+  (dark), the same values the backoffice and the provider's own
+  identity pages use — so an app built from this kit reads as
+  part of the same system as the login screen it redirects to.
+
+  Three changes from where these values came from:
+
+  1. Dark mode is `prefers-color-scheme`, not a hardcoded class
+     and not JS-applied inline styles. Light lives on bare
+     `:root`; dark redefines the same tokens under the media
+     query, guarded so an explicit light choice still wins; and
+     `[data-theme]` overrides both for a user-facing toggle.
+     A page that ships tokens as a blocking <link> also needs no
+     inline `var(--x, #fallback)` — those existed only because
+     the backoffice's tokens arrived via JS.
+
+  2. Both modes define the COMPLETE slot set. The source theme
+     had --surface-recessed in dark only.
+
+  3. Contrast floor: text tokens clear WCAG AA 4.5:1 on the
+     surface they sit on. The muted tone is the one that gets
+     this wrong — it carries small mono labels, where the old
+     value measured about 2.2:1. Re-check any replacement
+     against --surface AND --surface-elevated before shipping it.
+──────────────────────────────────────────────────────────────*/
+
+:root {
+  /* ── Type ────────────────────────────────────────────────
+     System stacks so the kit ships with no font dependency.
+     Swapping in a webfont is a per-app decision; if the app is
+     text-heavy, prefer a face designed for legibility (the
+     backoffice defaults to Atkinson Hyperlegible, deliberately
+     making the accessible choice the default rather than an
+     option). Always keep a real fallback stack. */
+  --font-heading: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body:    system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  --text-display: 2.25rem;
+  --text-h1:      1.75rem;
+  --text-h2:      1.375rem;
+  --text-h3:      1.125rem;
+  --text-h4:      1rem;
+  --text-body:    1rem;
+  --text-small:   0.9375rem;
+  --text-meta:    0.8125rem;
+  --text-micro:   0.6875rem;
+
+  --leading-display: 1.15;
+  --leading-heading: 1.25;
+  --leading-body:    1.6;
+  --tracking-label:  0.08em;
+  --measure-body:    65ch;
+
+  /* ── Structure: daylight ─────────────────────────────────── */
+  --surface:          #f6f4ef;
+  --surface-elevated: #fbfaf7;
+  --surface-recessed: #f0ede4;
+
+  --text-primary:   #26241f;
+  --text-secondary: #5c5647;
+  /* The small-label tone. Purpose-built to clear 4.5:1 on both
+     --surface and --surface-elevated; the lighter #8a8474 it
+     replaces does not. */
+  --text-tertiary:  #6d6757;
+
+  --border:        #e7e2d6;
+  --border-subtle: #efece3;
+  --selection:     #dfe9e2;
+
+  /* ── Identity ────────────────────────────────────────────── */
+  --accent:          #3d6b52;  /* sage */
+  --accent-contrast: #ffffff;
+  --accent-soft:     #eef3ef;
+  --accent-line:     #b8ccbf;
+
+  --warn:      #b5722a;
+  --warn-soft: #faf3e6;
+  --warn-line: #e3c9a3;
+
+  --danger:      #a33227;
+  --danger-soft: #f9ecea;
+
+  --code-bg: #f0ede4;
+
+  color-scheme: light dark;
+}
+
+/* Dark, for viewers who have expressed no explicit preference.
+   Guarded so an explicit light choice beats a dark OS. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface:          #12140f;
+    --surface-elevated: #1b1e17;
+    --surface-recessed: #0d0f0b;
+
+    --text-primary:   #eceadf;
+    --text-secondary: #b8b3a3;
+    --text-tertiary:  #9a9585;
+
+    --border:        rgba(255, 255, 255, 0.09);
+    --border-subtle: rgba(255, 255, 255, 0.05);
+    --selection:     rgba(143, 185, 138, 0.25);
+
+    --accent:          #8fb98a;
+    --accent-contrast: #12140f;
+    --accent-soft:     rgba(143, 185, 138, 0.14);
+    --accent-line:     rgba(143, 185, 138, 0.4);
+
+    --warn:      #d99a55;
+    --warn-soft: rgba(217, 154, 85, 0.13);
+    --warn-line: rgba(217, 154, 85, 0.35);
+
+    --danger:      #e0827a;
+    --danger-soft: rgba(224, 130, 122, 0.13);
+
+    --code-bg: #0d0f0b;
+  }
+}
+
+/* An explicit dark choice wins in the other direction too. */
+:root[data-theme="dark"] {
+  --surface:          #12140f;
+  --surface-elevated: #1b1e17;
+  --surface-recessed: #0d0f0b;
+
+  --text-primary:   #eceadf;
+  --text-secondary: #b8b3a3;
+  --text-tertiary:  #9a9585;
+
+  --border:        rgba(255, 255, 255, 0.09);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --selection:     rgba(143, 185, 138, 0.25);
+
+  --accent:          #8fb98a;
+  --accent-contrast: #12140f;
+  --accent-soft:     rgba(143, 185, 138, 0.14);
+  --accent-line:     rgba(143, 185, 138, 0.4);
+
+  --warn:      #d99a55;
+  --warn-soft: rgba(217, 154, 85, 0.13);
+  --warn-line: rgba(217, 154, 85, 0.35);
+
+  --danger:      #e0827a;
+  --danger-soft: rgba(224, 130, 122, 0.13);
+
+  --code-bg: #0d0f0b;
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   Components — the handful every app in this family needs.
+   Anything app-specific belongs in the app, not here.
+   ══════════════════════════════════════════════════════════ */
+
+h1 { font-size: var(--text-h1); line-height: var(--leading-heading); text-wrap: balance; }
+h2 { font-size: var(--text-h2); line-height: var(--leading-heading); text-wrap: balance; }
+h3 { font-size: var(--text-h3); line-height: var(--leading-heading); }
+
+p { max-width: var(--measure-body); }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+a {
+  color: var(--accent);
+  /* Underlined, not colour-only: colour alone is not an affordance, and the
+     accent is the same hue in both themes. */
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+hr {
+  border: 0;
+  border-top: var(--border-width) solid var(--border-subtle);
+  margin: var(--space-2) 0;
+}
+
+.lead {
+  color: var(--text-secondary);
+  max-width: var(--measure-body);
+}
+
+.error {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 30rem;
+}
+
+label {
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+}
+
+input[type="url"],
+input[type="text"] {
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+button {
+  padding: var(--space-3) var(--space-5);
+  border: var(--border-width) solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  font-size: var(--text-meta);
+  color: var(--text-tertiary);
+}

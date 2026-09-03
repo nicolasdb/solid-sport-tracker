@@ -31,6 +31,7 @@ import {
   type TimerState,
 } from "./lib/timer";
 import { ScreenWakeLock } from "./lib/wake-lock";
+import { applyTheme, loadTheme, nextTheme, THEME_LABELS, type ThemeChoice } from "./lib/theme";
 import { SessionSignals, type SignalKind, type SignalPrefs } from "./lib/signals";
 import {
   countUnrecognized,
@@ -45,6 +46,9 @@ const DEFAULT_IDENTIFIER = "https://pod.nicolasdb.eu/";
 const app = document.querySelector<HTMLDivElement>("#app")!;
 
 async function main() {
+  // Avant tout rendu : sinon le premier écran s'affiche dans le mauvais thème
+  // le temps d'un aller-retour réseau.
+  applyTheme(loadTheme());
   await completeLogin();
   const session = getSession();
 
@@ -682,6 +686,7 @@ function renderTimerBar(firstDuration: number): string {
         <button id="opt-sound" class="chip" type="button" aria-pressed="false">🔊 Bip</button>
         <button id="opt-haptic" class="chip" type="button" aria-pressed="false">📳 Vibration</button>
         <button id="opt-screen" class="chip" type="button" aria-pressed="false">🔆 Écran</button>
+        <button id="opt-theme" class="chip" type="button">🌗 Auto</button>
       </div>
     </section>
   `;
@@ -880,6 +885,10 @@ function wireDevicePrefs(
   const soundBtn = document.querySelector<HTMLButtonElement>("#opt-sound")!;
   const hapticBtn = document.querySelector<HTMLButtonElement>("#opt-haptic")!;
   const screenBtn = document.querySelector<HTMLButtonElement>("#opt-screen")!;
+  const themeBtn = document.querySelector<HTMLButtonElement>("#opt-theme")!;
+  // Tri-état, donc pas de `aria-pressed` : le libellé porte l'état, et c'est
+  // aussi ce que l'usager lit en plein soleil.
+  let theme: ThemeChoice = loadTheme();
 
   // Sans support haptique (iOS, poste de bureau) l'option ment : on la retire
   // plutôt que d'afficher un bouton sans effet.
@@ -896,6 +905,7 @@ function wireDevicePrefs(
     const marque = { native: "🔒", video: "🎞", off: "⚠️" }[wakeLock.status];
     const chutes = wakeLock.drops > 0 ? `×${wakeLock.drops}` : "";
     screenBtn.textContent = `🔆 Écran ${prefs.screenOn ? marque + chutes : ""}`.trim();
+    themeBtn.textContent = THEME_LABELS[theme];
   };
   setInterval(paint, 2000);
 
@@ -920,6 +930,11 @@ function wireDevicePrefs(
     }
   };
 
+  themeBtn.addEventListener("click", () => {
+    theme = nextTheme(theme);
+    applyTheme(theme);
+    paint();
+  });
   soundBtn.addEventListener("click", toggle("sound"));
   hapticBtn.addEventListener("click", toggle("haptic"));
   screenBtn.addEventListener("click", toggle("screenOn"));

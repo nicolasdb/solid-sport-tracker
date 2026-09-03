@@ -127,6 +127,22 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   from the clock and is called on `visibilitychange`. `wallClockSeconds` (whole
   session, pauses included) is what gets logged as the session duration, so a
   séance is measured even when few steps are timed.
+- `src/styles/core.css`, `src/styles/theme.css` — **copied from
+  [`solid-kit`](https://github.com/nicolasdb/solid-kit), not written here.**
+  The tracker predates the kit; adopting the tokens is what makes it read as
+  part of the same system as the login screen it redirects to. Fix a token
+  upstream and re-copy, never edit these two files here. `src/style.css` keeps
+  the app's own components and aliases the pre-kit names (`--fg`, `--bg`,
+  `--muted`) onto kit tokens rather than renaming 400 lines. No hardcoded
+  colour is left in it — `color: white` on an accent ground is
+  `--accent-contrast`, which is the token that changes with the theme.
+- `src/lib/theme.ts` — light/dark, **three states not two**: an explicit choice
+  stamps `data-theme` on `<html>`, "système" removes it so
+  `prefers-color-scheme` decides again. Without the third state a phone can no
+  longer follow the sunset once the button has been touched. Applied in `main()`
+  before any render, otherwise the first screen flashes the wrong ground. It is
+  a device preference like sound and screen-wake (bright sun outdoors vs a dark
+  room), so `localStorage`, not the pod.
 - `src/lib/wake-lock.ts` — `ScreenWakeLock`, keeps the screen on during a
   session. The browser drops the lock whenever the page is hidden, hence
   `reacquire()` on `visibilitychange`. Two routes to the *same* OS sleep

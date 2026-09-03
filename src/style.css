@@ -1,20 +1,18 @@
-:root {
-  color-scheme: light dark;
-  font-family: system-ui, sans-serif;
-  --fg: #1a1a1a;
-  --bg: #ffffff;
-  --muted: #666;
-  --accent: #2f6f4f;
-  --border: #ddd;
-}
+/* Design system du kit (solid-kit) : mêmes jetons que le backoffice et les
+   pages du fournisseur, pour qu'une app lue juste après l'écran de connexion
+   ne change pas de monde. core.css déclare les slots, theme.css les remplit —
+   ne pas éditer ces deux fichiers ici, ils se resynchronisent depuis le kit. */
+@import "./styles/core.css";
+@import "./styles/theme.css";
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fg: #f0f0f0;
-    --bg: #14161a;
-    --muted: #9aa0a6;
-    --border: #333;
-  }
+/* Les noms courts d'avant le kit, redirigés vers les jetons plutôt que
+   renommés partout : le CSS de l'app en dépend ligne à ligne, et un alias se
+   relit mieux qu'un diff de 400 lignes. Les nouvelles règles utilisent les
+   jetons directement. */
+:root {
+  --fg: var(--text-primary);
+  --bg: var(--surface);
+  --muted: var(--text-tertiary);
 }
 
 body {
@@ -71,7 +69,7 @@ body {
 }
 
 .error {
-  color: #c0392b;
+  color: var(--danger);
 }
 
 form#login-form {
@@ -94,7 +92,7 @@ button {
   border: 1px solid var(--accent);
   border-radius: 4px;
   background: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
   cursor: pointer;
 }
 
@@ -248,7 +246,7 @@ button.tab {
 button.tab.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
 }
 
 .streak {
@@ -307,7 +305,7 @@ button.tab.is-active {
 
 button.day.is-done {
   background: var(--accent);
-  color: white;
+  color: var(--accent-contrast);
   border-color: var(--accent);
   cursor: pointer;
 }
