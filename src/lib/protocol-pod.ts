@@ -312,6 +312,21 @@ export async function createLogbookFromProtocol(
   return logbookUrl;
 }
 
+/**
+ * Renomme un carnet `act:`. Ne touche que `logbook.ttl` — le titre copié
+ * depuis la recette au moment de la création (`protocol.ttl`) reste la
+ * provenance, jamais le nom d'usage.
+ */
+export async function renameLogbook(logbookContainerUrl: string, title: string): Promise<void> {
+  const docUrl = new URL("logbook.ttl", logbookContainerUrl).toString();
+  const dataset = await getSolidDataset(docUrl, { fetch: authFetch });
+  const subject = `${docUrl}#it`;
+  const thing = getThing(dataset, subject);
+  if (!thing) throw new Error(`Carnet introuvable: ${docUrl}`);
+  const updated = buildThing(thing).setStringNoLocale(act.title, title).build();
+  await saveSolidDatasetAt(docUrl, setThing(dataset, updated), { fetch: authFetch });
+}
+
 /** Lit la fiche d'un carnet, ou null si le container n'en porte pas (ancien carnet `st:`). */
 export async function readLogbook(logbookContainerUrl: string): Promise<Logbook | null> {
   const docUrl = new URL("logbook.ttl", logbookContainerUrl).toString();

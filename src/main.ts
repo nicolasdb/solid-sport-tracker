@@ -13,6 +13,7 @@ import {
   readPreferences,
   readSeance,
   readSeanceModele,
+  renameCarnet,
   seanceDayFromUrl,
   setActiveCarnet,
 } from "./lib/pod";
@@ -22,6 +23,7 @@ import {
   readLogbook,
   readProtocol,
   readSession,
+  renameLogbook,
   sessionsContainer,
 } from "./lib/protocol-pod";
 import {
@@ -32,6 +34,7 @@ import {
 } from "./lib/timer";
 import { ScreenWakeLock } from "./lib/wake-lock";
 import { shortWebId } from "./lib/webid";
+import { carnetCreatedAt } from "./lib/carnet-id";
 import { applyTheme, loadTheme, nextTheme, THEME_LABELS, type ThemeChoice } from "./lib/theme";
 import {
   applyLang,
@@ -315,11 +318,16 @@ function renderNewLogbookView(webId: string, podUrl: string, onCancel?: () => vo
       <form id="new-logbook">
         <label for="recette">${t().recipeAddress}</label>
         <input id="recette" name="recette" type="url" value="${RECETTE_EXEMPLE}" required />
-        <p class="meta">${t().copyNote}</p>
-        <p class="meta">${t().willCreate(carnetsContainer(podUrl))}</p>
         <p class="error" id="new-error" hidden></p>
-        <button type="submit" id="new-submit">${t().openCarnet}</button>
-        ${onCancel ? `<button type="button" id="new-cancel" class="ghost">${t().cancel}</button>` : ""}
+        <div class="form-actions">
+          <button type="submit" id="new-submit">${t().openCarnet}</button>
+          ${onCancel ? `<button type="button" id="new-cancel" class="ghost">${t().cancel}</button>` : ""}
+        </div>
+        <details class="tech-details">
+          <summary>${t().technicalDetails}</summary>
+          <p class="meta">${t().copyNote}</p>
+          <p class="meta">${t().willCreate(carnetsContainer(podUrl))}</p>
+        </details>
       </form>
       ${onCancel ? "" : `<button id="logout" class="ghost">${t().logout}</button>`}
     </main>
@@ -370,15 +378,21 @@ async function renderCarnetPickerView(
       <button id="pick-back" class="ghost">${t().back}</button>
       <h1>${t().carnets}</h1>
       <p class="meta" title="${webId}">${shortWebId(webId)}</p>
-      <ol class="blocs" id="carnet-list">
+      <ol class="carnet-list" id="carnet-list">
         ${carnetUrls
           .map(
             (url) => `
-          <li class="bloc${url === activeCarnetUrl ? " is-current" : ""}">
-            <span>…</span>
-            <button data-carnet="${url}" ${url === activeCarnetUrl ? "disabled" : ""}>
-              ${url === activeCarnetUrl ? t().active : t().open}
-            </button>
+          <li class="carnet-card${url === activeCarnetUrl ? " is-active" : ""}" data-url="${url}">
+            <div class="carnet-row">
+              <button class="carnet-open" data-open="${url}" ${
+                url === activeCarnetUrl ? "disabled" : ""
+              }>
+                <span class="carnet-title" data-title>…</span>
+              </button>
+              ${url === activeCarnetUrl ? `<span class="carnet-badge">${t().active}</span>` : ""}
+              <button class="icon-btn" data-rename="${url}" title="${t().rename}" type="button" disabled>✎</button>
+            </div>
+            <p class="carnet-meta" data-meta></p>
           </li>`
           )
           .join("")}
@@ -407,11 +421,12 @@ async function renderCarnetPickerView(
     renderNewLogbookView(webId, podUrl, () => renderCarnetPickerView(webId, podUrl, carnetUrls, activeCarnetUrl));
   });
 
-  document.querySelectorAll<HTMLButtonElement>("#carnet-list button[data-carnet]").forEach((btn) => {
+  document.querySelectorAll<HTMLButtonElement>("#carnet-list button[data-open]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      const url = btn.dataset.carnet!;
+      const url = btn.dataset.open!;
       btn.disabled = true;
-      btn.textContent = t().opening;
+      const title = btn.querySelector<HTMLElement>("[data-title]")!;
+      title.textContent = t().opening;
       try {
         await setActiveCarnet(podUrl, url);
         await renderApp(webId, url);
@@ -421,19 +436,96 @@ async function renderCarnetPickerView(
     });
   });
 
-  // Titres chargés après affichage : la liste ne dépend pas d'un aller-retour
-  // supplémentaire pour apparaître, seul le libellé se remplit ensuite.
-  carnetUrls.forEach((url, i) => {
+  // legacy par carnet, connu seulement une fois le titre chargé — le crayon en
+  // a besoin pour écrire au bon endroit (logbook.ttl vs carnet.ttl).
+  const legacyByUrl = new Map<string, boolean>();
+
+  const wireRename = (url: string) => {
+    const card = document.querySelector<HTMLLIElement>(`.carnet-card[data-url="${CSS.escape(url)}"]`)!;
+    const row = card.querySelector<HTMLElement>(".carnet-row")!;
+    const titleEl = card.querySelector<HTMLElement>("[data-title]")!;
+    const renameBtn = card.querySelector<HTMLButtonElement>("[data-rename]")!;
+
+    renameBtn.addEventListener("click", () => {
+      const current = titleEl.textContent ?? "";
+      row.innerHTML = `
+        <form class="carnet-rename-form">
+          <input type="text" value="${current.replace(/"/g, "&quot;")}" required />
+          <button type="submit">${t().renameSave}</button>
+          <button type="button" class="ghost" data-rename-cancel>${t().renameCancel}</button>
+        </form>
+      `;
+      const form = row.querySelector<HTMLFormElement>(".carnet-rename-form")!;
+      const input = row.querySelector<HTMLInputElement>("input")!;
+      input.focus();
+      input.select();
+
+      const restore = (label: string) => {
+        row.innerHTML = `
+          <button class="carnet-open" data-open="${url}" ${url === activeCarnetUrl ? "disabled" : ""}>
+            <span class="carnet-title" data-title>${label}</span>
+          </button>
+          ${url === activeCarnetUrl ? `<span class="carnet-badge">${t().active}</span>` : ""}
+          <button class="icon-btn" data-rename="${url}" title="${t().rename}" type="button">✎</button>
+        `;
+        row.querySelector<HTMLButtonElement>("[data-open]")!.addEventListener("click", async () => {
+          const openBtn = row.querySelector<HTMLButtonElement>("[data-open]")!;
+          openBtn.disabled = true;
+          row.querySelector<HTMLElement>("[data-title]")!.textContent = t().opening;
+          try {
+            await setActiveCarnet(podUrl, url);
+            await renderApp(webId, url);
+          } catch (err) {
+            renderErrorView(webId, err);
+          }
+        });
+        wireRename(url);
+      };
+
+      row.querySelector<HTMLButtonElement>("[data-rename-cancel]")!.addEventListener("click", () => {
+        restore(current);
+      });
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const value = input.value.trim();
+        if (!value) return;
+        const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+        submitBtn.disabled = true;
+        submitBtn.textContent = t().renameSaving;
+        try {
+          if (legacyByUrl.get(url)) {
+            await renameCarnet(url, value);
+          } else {
+            await renameLogbook(url, value);
+          }
+          restore(value);
+        } catch (err) {
+          renderErrorView(webId, err);
+        }
+      });
+    });
+  };
+
+  carnetUrls.forEach((url) => wireRename(url));
+
+  // Titres et dates chargés après affichage : la liste ne dépend pas d'un
+  // aller-retour supplémentaire pour apparaître, seuls les libellés se
+  // remplissent ensuite.
+  carnetUrls.forEach((url) => {
+    const card = document.querySelector<HTMLLIElement>(`.carnet-card[data-url="${CSS.escape(url)}"]`)!;
+    const titleEl = card.querySelector<HTMLElement>("[data-title]")!;
+    const metaEl = card.querySelector<HTMLElement>("[data-meta]")!;
+    const created = carnetCreatedAt(url);
+    if (created) metaEl.textContent = t().createdOn(created.toLocaleDateString(dateLocale()));
+
     loadProgramme(url)
       .then((programme) => {
-        const item = document.querySelectorAll<HTMLLIElement>("#carnet-list li")[i];
-        const span = item?.querySelector("span");
-        if (span) span.textContent = programme.titre;
+        legacyByUrl.set(url, programme.legacy);
+        titleEl.textContent = programme.titre;
+        card.querySelector<HTMLButtonElement>("[data-rename]")!.disabled = false;
       })
       .catch(() => {
-        const item = document.querySelectorAll<HTMLLIElement>("#carnet-list li")[i];
-        const span = item?.querySelector("span");
-        if (span) span.textContent = t().unreadableCarnet;
+        titleEl.textContent = t().unreadableCarnet;
       });
   });
 }

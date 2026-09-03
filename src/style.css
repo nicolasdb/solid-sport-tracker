@@ -99,12 +99,35 @@ form#login-form {
   max-width: 480px;
 }
 
-input[type="url"] {
+input[type="url"],
+input[type="text"] {
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg);
   color: var(--fg);
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Le plomb technique (chemin exact, note de provenance) attend qu'on le
+   cherche : l'écran ouvre sur la seule décision qui compte, l'adresse à
+   ouvrir, pas sur un mur de texte avant le bouton. */
+.tech-details {
+  margin-top: 0.5rem;
+  font-size: var(--text-meta);
+}
+
+.tech-details summary {
+  cursor: pointer;
+  color: var(--text-tertiary);
+}
+
+.tech-details p.meta {
+  margin-top: 0.4rem;
 }
 
 button {
@@ -153,6 +176,111 @@ button.ghost {
   margin-top: 1.5rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border-subtle);
+}
+
+/*
+ * Cartes du sélecteur de carnet. Volontairement séparées de `ol.blocs` /
+ * `li.bloc` : ces classes portent l'effet loupe de l'étape en cours pendant
+ * une séance (voir `li.bloc.is-current` plus bas), et le sélecteur les
+ * empruntait par accident — le titre du carnet actif s'affichait à la même
+ * taille que l'étape en cours d'un chrono, sans rapport avec ce qu'il montre
+ * ici.
+ */
+.carnet-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.carnet-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.25rem 0.75rem;
+}
+
+.carnet-card.is-active {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.carnet-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Toute la carte ouvre le carnet : un bouton dédié par ligne, à côté du
+   crayon de renommage, ferait deux actions primaires sur une seule ligne. */
+.carnet-open {
+  flex: 1;
+  display: block;
+  text-align: left;
+  padding: 0.6rem 0;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.carnet-open:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.carnet-title {
+  font-weight: 500;
+}
+
+.carnet-badge {
+  flex: none;
+  font-size: var(--text-micro);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-full);
+  padding: 0.15rem 0.55rem;
+}
+
+.icon-btn {
+  flex: none;
+  padding: 0.3rem 0.5rem;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-tertiary);
+}
+
+.icon-btn:hover {
+  border-color: var(--border);
+}
+
+.carnet-meta {
+  font-size: var(--text-micro);
+  color: var(--text-tertiary);
+  padding: 0 0 0.5rem;
+}
+
+.carnet-rename-form {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex: 1;
+  padding: 0.4rem 0;
+}
+
+.carnet-rename-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.carnet-rename-form button {
+  flex: none;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
 }
 
 .topbar button {

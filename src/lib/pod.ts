@@ -353,6 +353,22 @@ export async function createCarnet(podUrl: string, input: NewCarnet): Promise<st
 }
 
 /**
+ * Renomme un carnet `st:` (ancien vocabulaire). Ne touche que `carnet.ttl` —
+ * `modele.ttl` et les séances déjà écrites gardent leurs propres titres, comme
+ * `renameLogbook` (`protocol-pod.ts`) ne touche que `logbook.ttl` et laisse le
+ * protocole copié intact.
+ */
+export async function renameCarnet(carnetContainerUrl: string, titre: string): Promise<void> {
+  const carnetDocUrl = new URL("carnet.ttl", carnetContainerUrl).toString();
+  const dataset = await getSolidDataset(carnetDocUrl, { fetch });
+  const subject = `${carnetDocUrl}#it`;
+  const thing = getThing(dataset, subject);
+  if (!thing) throw new Error(`Carnet introuvable: ${carnetDocUrl}`);
+  const updated = buildThing(thing).setStringNoLocale(st.titre, titre).build();
+  await saveSolidDatasetAt(carnetDocUrl, setThing(dataset, updated), { fetch });
+}
+
+/**
  * Vrai si l'échec vient de l'authentification plutôt que de la ressource.
  * Sur un pod privé, un jeton expiré fait répondre 401 à *tout*, y compris aux
  * sondes d'existence — l'erreur brute renvoyée est alors trompeuse.
