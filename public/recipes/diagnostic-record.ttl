@@ -1,0 +1,86 @@
+@prefix act:  <https://vocab.nicolasdb.eu/activity#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# Diagnostic app — collecte de valeurs.
+#
+# Compagnon de diagnostic-app.ttl, qui couvre les cinq types exécutables.
+# Celui-ci n'exerce qu'un seul type, act:RecordStep, dans ses quatre formes.
+#
+# AVANT implémentation : cette recette est un test du repli du parseur. Elle
+# doit afficher « 5 étapes de type non reconnu », les exécuter comme des
+# checklists, et poser cinq console.warn. Si ce n'est pas le cas, le §2 du
+# premier handoff n'est pas aussi solide qu'on le croit.
+#
+# APRÈS implémentation, attendu dans l'ordre :
+#   1. échelle 0–10, un tap saisit et valide      → signal « prompt »
+#   2. nombre avec unité, saisie puis validation  → signal « prompt »
+#   3. 20 s chronométrées, PUIS saisie sans tap intermédiaire
+#      (deux runnables, le second en chain — c'est le test structurel)
+#   4. texte libre
+#   5. à passer volontairement avec « Passer » :
+#      doit enregistrer completed=false SANS valeur, pas une valeur vide
+#   6. session
+#
+# 20 secondes chronométrées. Le reste dépend de la vitesse de saisie.
+#
+# Note de placement : toutes les étapes de collecte sont ici en début ou fin
+# de séance, jamais au milieu d'un effort — une saisie oblige à regarder
+# l'écran et casse le suivi haptique. C'est une règle d'écriture, pas une
+# limite technique.
+
+<#it> a act:Protocol ;
+  act:title "Diagnostic app — collecte de valeurs" ;
+  act:goal "Vérifier la saisie, la persistance et le signal des étapes de collecte" ;
+  act:cadence "À chaque changement du modèle de collecte" ;
+  act:hasStep <#echelle>, <#nombre>, <#plafonne>, <#texte>, <#passe> .
+
+# 1 — Le kind clinique par excellence, et le seul saisissable presque sans
+#     regarder : une rangée de boutons, un tap.
+<#echelle> a act:RecordStep ;
+  act:order 1 ;
+  act:title "Échelle 0 à 10" ;
+  act:prompt "Valeur de test sur une échelle" ;
+  act:note "Un tap doit saisir et valider en un seul geste" ;
+  act:valueKind "scale" ;
+  act:minValue 0 ;
+  act:maxValue 10 .
+
+# 2 — Vérifie que act:unit est réutilisé tel quel et affiché près du champ.
+<#nombre> a act:RecordStep ;
+  act:order 2 ;
+  act:title "Nombre avec unité" ;
+  act:prompt "Saisir une valeur numérique quelconque" ;
+  act:valueKind "number" ;
+  act:unit "degrés" .
+
+# 3 — LE test structurel. targetSeconds doit produire DEUX runnables :
+#     l'effort chronométré, puis la saisie enchaînée sans « Je suis prêt ».
+#     Si l'app demande une validation entre les deux, le découpage de
+#     flattenSteps n'a pas été fait comme prévu.
+<#plafonne> a act:RecordStep ;
+  act:order 3 ;
+  act:title "Compte plafonné dans le temps" ;
+  act:prompt "Combien de répétitions dans le temps imparti ?" ;
+  act:note "Ne rien toucher pendant le décompte" ;
+  act:valueKind "number" ;
+  act:unit "répétitions" ;
+  act:targetSeconds 20 .
+
+# 4 — Le cas où rien n'est mesurable mais où l'observation est le livrable :
+#     c'est ce kind qui ouvre les domaines hors sport.
+<#texte> a act:RecordStep ;
+  act:order 4 ;
+  act:title "Texte libre" ;
+  act:prompt "Noter une observation" ;
+  act:valueKind "text" .
+
+# 5 — À PASSER volontairement. Une valeur non saisie n'est pas un zéro :
+#     le StepRun doit porter completed=false et aucun act:value.
+<#passe> a act:RecordStep ;
+  act:order 5 ;
+  act:title "À passer volontairement" ;
+  act:prompt "Ne pas répondre — utiliser le bouton Passer" ;
+  act:note "Vérifier ensuite sur le pod : ni act:value, ni valeur vide" ;
+  act:valueKind "scale" ;
+  act:minValue 0 ;
+  act:maxValue 5 .
