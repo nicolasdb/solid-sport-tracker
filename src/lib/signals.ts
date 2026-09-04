@@ -27,6 +27,7 @@ export type SignalKind =
   | "tick" // décompte des dernières secondes
   | "phase" // fin d'une phase d'intervalle, le tour continue
   | "step" // fin d'une étape
+  | "prompt" // une saisie attend : « arrête-toi et regarde », pas « bloc suivant »
   | "session"; // fin de séance
 
 interface SignalPattern {
@@ -46,6 +47,9 @@ const PATTERNS: Record<SignalKind, SignalPattern> = {
   tick: { tones: [880], toneMs: 60, vibration: [40] },
   phase: { tones: [1320], toneMs: 110, vibration: [110] },
   step: { tones: [660, 990], toneMs: 130, vibration: [140, 90, 140] },
+  // Nettement distinct de `step` : une longue tenue plutôt qu'un double bip,
+  // parce que c'est un appel à regarder l'écran, pas juste à continuer.
+  prompt: { tones: [990, 990, 990], toneMs: 200, vibration: [80, 60, 80, 60, 300] },
   session: { tones: [660, 880, 1320], toneMs: 160, vibration: [200, 120, 200, 120, 320] },
 };
 

@@ -94,6 +94,7 @@ const fr = {
   timerSkip: "Passer",
   timerReset: "Réinit.",
   timerFinish: "Terminer",
+  captureSubmit: "Valider",
   stepCount: (i: number, n: number) => `Étape ${i} / ${n}`,
 
   optSound: "🔊 Bip",
@@ -194,6 +195,7 @@ const en: Strings = {
   timerSkip: "Skip",
   timerReset: "Reset",
   timerFinish: "Finish",
+  captureSubmit: "Submit",
   stepCount: (i: number, n: number) => `Step ${i} / ${n}`,
 
   optSound: "🔊 Beep",

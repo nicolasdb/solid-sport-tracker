@@ -128,13 +128,27 @@ function readStep(dataset: SolidDataset, url: string): Step | null {
   if (types.includes(act.ChecklistStep)) {
     return { kind: "checklist", ...common };
   }
+  if (types.includes(act.RecordStep)) {
+    return {
+      kind: "record",
+      ...common,
+      prompt: readLiteral(thing, act.prompt) ?? undefined,
+      valueKind: (readLiteral(thing, act.valueKind) as "scale" | "number" | "text") ?? "text",
+      unit: readLiteral(thing, act.unit) ?? undefined,
+      minValue: getInteger(thing, act.minValue) ?? undefined,
+      maxValue: getInteger(thing, act.maxValue) ?? undefined,
+      targetSeconds: getInteger(thing, act.targetSeconds) ?? undefined,
+    };
+  }
   // Type inconnu : on ne devine pas, mais une étape sans mesure reste
   // exécutable — mieux vaut l'afficher que perdre une étape du protocole.
   // Marquée `unrecognized` pour que l'app le dise plutôt que de faire passer
-  // une faute de frappe (ou un act:RecordStep pas encore posé) pour une
-  // checklist voulue.
+  // une faute de frappe pour une checklist voulue. `unknownTypes` conserve les
+  // IRI lues : sans ça, `buildProtocolDataset` les aplatirait en
+  // `act:ChecklistStep` à la première copie, et la perte deviendrait
+  // définitive dès le carnet créé — voir le commentaire sur cette fonction.
   console.warn("[sport-tracker] type d'étape non reconnu", url, types);
-  return { kind: "checklist", ...common, unrecognized: true };
+  return { kind: "checklist", ...common, unrecognized: true, unknownTypes: types };
 }
 
 /** Étapes d'un conteneur (protocole ou groupe répété), triées par act:order. */
@@ -206,7 +220,25 @@ function buildProtocolDataset(docUrl: string, protocol: Protocol): SolidDataset 
           if (step.unit) builder = builder.setStringNoLocale(act.unit, step.unit);
           break;
         case "checklist":
-          builder = builder.addUrl(RDF_TYPE, act.ChecklistStep);
+          if (step.unknownTypes?.length) {
+            // Type non reconnu à la lecture : préserver les IRI d'origine
+            // plutôt que d'aplatir en act:ChecklistStep, sinon la copie rend
+            // le repli §2 muet à partir de la deuxième ouverture du carnet.
+            step.unknownTypes.forEach((t) => (builder = builder.addUrl(RDF_TYPE, t)));
+          } else {
+            builder = builder.addUrl(RDF_TYPE, act.ChecklistStep);
+          }
+          break;
+        case "record":
+          builder = builder
+            .addUrl(RDF_TYPE, act.RecordStep)
+            .setStringNoLocale(act.valueKind, step.valueKind);
+          if (step.prompt) builder = builder.setStringNoLocale(act.prompt, step.prompt);
+          if (step.unit) builder = builder.setStringNoLocale(act.unit, step.unit);
+          if (step.minValue !== undefined) builder = builder.setInteger(act.minValue, step.minValue);
+          if (step.maxValue !== undefined) builder = builder.setInteger(act.maxValue, step.maxValue);
+          if (step.targetSeconds !== undefined)
+            builder = builder.setInteger(act.targetSeconds, step.targetSeconds);
           break;
         case "interval": {
           builder = builder
@@ -399,6 +431,9 @@ export async function logSession(
       .setInteger(act.completed, run.completed ? 1 : 0)
       .setInteger(act.durationSeconds, run.durationSeconds);
     if (run.ofStepUrl) builder = builder.setUrl(act.ofStep, run.ofStepUrl);
+    // Absente, pas vide : une valeur non saisie (étape passée) ne doit pas se
+    // relire comme une chaîne vide.
+    if (run.value !== undefined) builder = builder.setStringNoLocale(act.value, run.value);
     dataset = setThing(dataset, builder.build());
   });
 
@@ -430,6 +465,7 @@ export async function readSession(docUrl: string): Promise<Session> {
       title: readLiteral(t, act.title) ?? "(sans titre)",
       completed: (getInteger(t, act.completed) ?? 0) !== 0,
       durationSeconds: getInteger(t, act.durationSeconds) ?? 0,
+      value: readLiteral(t, act.value) ?? undefined,
     }))
     // L'ordre des objets d'un prédicat n'est pas garanti : on retrie sur le
     // rang porté par le fragment `#run-N`.

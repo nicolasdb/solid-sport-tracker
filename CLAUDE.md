@@ -181,10 +181,35 @@ models, preferences) lives on the pod as Turtle documents, not in this app.
   Sound/haptic/screen toggles are stored in `localStorage`, **not** on the
   pod: they describe the device and the room (silent yoga class vs running
   with headphones), not the user.
+  `SignalKind` has a fifth entry, `"prompt"`, distinct from `"step"`: "stop
+  and look" versus "next block" — emitted when a `RecordStep`'s capture
+  runnable comes next, since that one breaks silent/eyes-free tracking.
+- `act:RecordStep` (`src/vocab/protocol.ts`) is the one step type that
+  **collects** instead of imposing — the only source of a progression series
+  (via `act:ofStep` across a carnet's sessions), and how domains outside sport
+  (nutrition, myofunctional therapy) get represented at all: mostly
+  observation, not a stopwatch. `flattenSteps` splits a `targetSeconds`
+  record into two runnables (the timed effort, then a `chain: true` capture)
+  rather than adding a third mode to `SequenceTimer`. **Placement is a recipe
+  authoring rule, not a code constraint**: a `RecordStep` belongs at the start
+  or end of a session, never mid-effort — capturing a value means looking at
+  the screen, which breaks the point of the eyes-free signals above.
+  A `RecordStep` value is entered in the timer bar at capture time and shown
+  **read-only** in the recap — the recap confirms what happened and how it
+  felt, it is not a data-entry form; a session that never ran the timer
+  (logged after the fact) has no value to show, on purpose.
 - `public/recipes/echauffement.ttl` — the example recipe, in Turtle, served by
   the app itself. Loaded **by URI**, never imported from code: the discovery
   path a third-party recipe would take is exercised from the first carnet on.
   It deliberately uses all four step types and nesting.
+  `public/recipes/diagnostic-record.ttl` is the `RecordStep` counterpart. It
+  also doubles as a regression test for the unknown-`rdf:type` fallback in
+  `parseStep` (`protocol-pod.ts`): loading it before the app knows
+  `RecordStep` should show "5 unrecognized step types" and warn per step —
+  and, because the fallback now writes the original `rdf:type` IRIs back
+  (rather than flattening to `act:ChecklistStep`) when the parsed protocol is
+  copied into a carnet on creation, that banner survives every later reload
+  of the carnet, not just the first.
 
 ### Session logging
 

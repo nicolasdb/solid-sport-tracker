@@ -31,6 +31,7 @@ export const act = {
   CountedStep: `${ACT}CountedStep`,
   IntervalStep: `${ACT}IntervalStep`,
   ChecklistStep: `${ACT}ChecklistStep`,
+  RecordStep: `${ACT}RecordStep`,
   RepeatStep: `${ACT}RepeatStep`,
   Phase: `${ACT}Phase`,
   StepRun: `${ACT}StepRun`,
@@ -46,6 +47,13 @@ export const act = {
   targetCount: `${ACT}targetCount`,
   unit: `${ACT}unit`,
   hasPhase: `${ACT}hasPhase`,
+  /** La question posée, quand elle diffère du titre de l'étape. */
+  prompt: `${ACT}prompt`,
+  valueKind: `${ACT}valueKind`,
+  minValue: `${ACT}minValue`,
+  maxValue: `${ACT}maxValue`,
+  /** Portée par le StepRun, jamais par l'étape : c'est ce qui a été relevé. */
+  value: `${ACT}value`,
   rounds: `${ACT}rounds`,
   times: `${ACT}times`,
 
@@ -112,6 +120,43 @@ export interface ChecklistStep {
    * plutôt que de faire passer une faute de frappe pour un choix.
    */
   unrecognized?: boolean;
+  /**
+   * Les IRI `rdf:type` effectivement lues, quand aucune n'a été reconnue.
+   * Conservées pour que la copie du protocole dans un carnet les réécrive
+   * telles quelles : sans ça, une recette en avance sur l'app est aplatie en
+   * checklist à la création et la perte devient définitive — le bandeau
+   * disparaît dès la deuxième ouverture, et le jour où l'app apprend le type
+   * le carnet ne le retrouve plus.
+   */
+  unknownTypes?: string[];
+}
+
+/**
+ * Une étape qui **collecte** au lieu d'imposer : EVA douleur, degrés de
+ * flexion, RPE, ressenti libre. Le seul type où l'app écrit une donnée que la
+ * recette ne connaissait pas — donc le seul qui produise une série temporelle
+ * lisible d'une séance à l'autre (via `act:ofStep`).
+ *
+ * `targetSeconds` en fait un compte plafonné dans le temps (« un max de
+ * squats en 40 s ») : l'horloge borne l'effort, la valeur est le résultat.
+ *
+ * Règle d'écriture, pas contrainte de code : une étape de collecte se place en
+ * début ou en fin de séance, jamais au milieu d'un effort — saisir oblige à
+ * regarder l'écran et casse le suivi sonore/haptique.
+ */
+export interface RecordStep {
+  kind: "record";
+  url?: string;
+  title: string;
+  note?: string;
+  prompt?: string;
+  valueKind: "scale" | "number" | "text";
+  /** « degrés », « répétitions »… affiché à côté du champ. */
+  unit?: string;
+  minValue?: number;
+  maxValue?: number;
+  /** Si présent : l'effort est chronométré, puis la valeur est saisie. */
+  targetSeconds?: number;
 }
 
 /**
@@ -133,6 +178,7 @@ export type Step =
   | CountedStep
   | IntervalStep
   | ChecklistStep
+  | RecordStep
   | RepeatStep;
 
 export interface Protocol {
@@ -163,6 +209,13 @@ export interface StepRun {
   title: string;
   completed: boolean;
   durationSeconds: number;
+  /**
+   * La mesure relevée, en chaîne — y compris pour un nombre : le typage utile
+   * est porté par `valueKind` sur l'étape d'origine, et une échelle notée `7`
+   * ou `7/10` selon les jours ne doit pas casser la lecture d'un carnet.
+   * Absente (pas vide) quand l'étape a été passée sans saisie.
+   */
+  value?: string;
 }
 
 export interface Session {
@@ -203,6 +256,13 @@ export interface RunnableStep {
    * un seul prédicat, pas deux qui dérivent.
    */
   chain?: boolean;
+  /**
+   * Cette étape attend une saisie plutôt qu'une validation muette. Drapeau
+   * explicite posé par `flattenSteps` — la seule fonction qui sache déjà
+   * qu'une `RecordStep` a été découpée, pas déduit à l'affichage de
+   * `sourceStep.kind === "record"`.
+   */
+  capture?: boolean;
 }
 
 /**
@@ -239,6 +299,39 @@ export function flattenSteps(steps: Step[]): RunnableStep[] {
             sourceStep: step,
             round,
           });
+          break;
+        case "record":
+          if (step.targetSeconds) {
+            out.push({
+              label: `${step.title}${suffix}`,
+              seconds: step.targetSeconds,
+              sourceStep: step,
+              round,
+            });
+            out.push({
+              label: `${step.title}${suffix}`,
+              seconds: 0,
+              sourceStep: step,
+              round,
+              capture: true,
+              // La saisie enchaîne sans « Je suis prêt » : c'est la même
+              // étape qui continue, pas un nouveau bloc à confirmer.
+              chain: true,
+            });
+          } else {
+            out.push({
+              label: `${step.title}${suffix}`,
+              seconds: 0,
+              sourceStep: step,
+              round,
+              capture: true,
+              // Pas d'horloge à fausser ici : entrer directement, sans le
+              // « Je suis prêt » qu'impose une transition normale. Seule la
+              // variante chronométrée ci-dessus le garde, pour ne pas biaiser
+              // le décompte.
+              chain: true,
+            });
+          }
           break;
         case "interval":
           for (let r = 1; r <= step.rounds; r += 1) {
@@ -294,6 +387,8 @@ export function describeStep(step: Step): string {
     }
     case "checklist":
       return "";
+    case "record":
+      return [step.prompt, step.unit].filter(Boolean).join(" — ");
     case "repeat":
       return t().rounds(step.times);
   }

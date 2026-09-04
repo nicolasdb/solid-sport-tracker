@@ -464,6 +464,47 @@ li.bloc.is-past {
   font-size: 0.85rem;
 }
 
+/* Écran de saisie d'une RecordStep : remplace « C'est fait » pendant la
+   collecte. `scale` mérite une rangée de gros boutons, seul kind utilisable
+   presque sans regarder l'écran (voir docs/handoff-2-record.md). */
+.timer-capture {
+  margin: 0.75rem 0;
+}
+
+.capture-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.capture-scale button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
+.capture-number,
+.capture-text {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.capture-text {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.capture-number input,
+.capture-text textarea {
+  flex: 1;
+}
+
+.recap-value {
+  font-weight: 600;
+}
+
 /* Options de séance : discrètes, mais atteignables en pleine séance. */
 .timer-toggles {
   display: flex;
@@ -678,7 +719,9 @@ ul.detail-blocs li.is-skipped {
 }
 
 #recap-form textarea,
-#recap-form input[type="number"] {
+#recap-form input[type="number"],
+.timer-capture textarea,
+.timer-capture input[type="number"] {
   padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 4px;

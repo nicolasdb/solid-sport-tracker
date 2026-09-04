@@ -789,6 +789,7 @@ function renderTimerBar(firstDuration: number): string {
       <div class="timer-controls">
         <button id="timer-toggle">${t().timerStart}</button>
       </div>
+      <div id="timer-capture" class="timer-capture" hidden></div>
       <div class="timer-controls secondary">
         <button id="timer-skip" class="ghost">${t().timerSkip}</button>
         <button id="timer-reset" class="ghost">${t().timerReset}</button>
@@ -864,6 +865,74 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   const progressFill = document.querySelector<HTMLElement>("#timer-progress-fill")!;
   const count = document.querySelector<HTMLElement>("#timer-count")!;
   const blocItems = Array.from(document.querySelectorAll<HTMLLIElement>("li.bloc"));
+  const captureEl = document.querySelector<HTMLDivElement>("#timer-capture")!;
+
+  // Valeurs relevées par les étapes de collecte, indexées comme `steps` — la
+  // seule copie tant que le récapitulatif n'a pas ouvert (`toRecapRows` lit
+  // le `SessionRecord`, pas cette map ; elle est passée à part).
+  const values = new Map<number, string>();
+  let captureRenderedFor = -1;
+
+  /**
+   * Construit l'écran de saisie une seule fois par étape (pas à chaque tick
+   * du minuteur, sinon un champ texte en cours de frappe serait effacé sous
+   * les doigts). Remplace « C'est fait » : un tap sur `scale` saisit et
+   * valide dans le même geste.
+   */
+  const renderCapture = (state: TimerState) => {
+    const runnable = steps[state.stepIndex];
+    // `running` exclut l'attente du feu vert : « Je suis prêt » doit rester
+    // visible, seul le geste de clôture (« C'est fait ») est remplacé.
+    const active = !state.done && state.running && !!runnable?.capture;
+    toggleBtn.hidden = active;
+    if (!active) {
+      captureEl.hidden = true;
+      captureRenderedFor = -1;
+      return;
+    }
+    captureEl.hidden = false;
+    if (captureRenderedFor === state.stepIndex) return;
+    captureRenderedFor = state.stepIndex;
+
+    const source = runnable.sourceStep;
+    if (source.kind !== "record") return; // capture n'est posé que par ce kind.
+    const submit = (raw: string) => {
+      values.set(state.stepIndex, raw);
+      timer.complete();
+    };
+
+    if (source.valueKind === "scale") {
+      const min = source.minValue ?? 0;
+      const max = source.maxValue ?? 10;
+      const buttons: string[] = [];
+      for (let v = min; v <= max; v += 1) buttons.push(`<button type="button" data-v="${v}">${v}</button>`);
+      captureEl.innerHTML = `<div class="capture-scale">${buttons.join("")}</div>`;
+      captureEl.querySelectorAll<HTMLButtonElement>("button[data-v]").forEach((btn) => {
+        btn.addEventListener("click", () => submit(btn.dataset.v!));
+      });
+    } else if (source.valueKind === "number") {
+      captureEl.innerHTML = `
+        <div class="capture-number">
+          <input type="number" id="capture-input" inputmode="decimal" />
+          ${source.unit ? `<span class="meta">${source.unit}</span>` : ""}
+          <button type="button" id="capture-submit">${t().captureSubmit}</button>
+        </div>`;
+      captureEl
+        .querySelector<HTMLButtonElement>("#capture-submit")!
+        .addEventListener("click", () => submit(captureEl.querySelector<HTMLInputElement>("#capture-input")!.value));
+    } else {
+      captureEl.innerHTML = `
+        <div class="capture-text">
+          <textarea id="capture-input" rows="2"></textarea>
+          <button type="button" id="capture-submit">${t().captureSubmit}</button>
+        </div>`;
+      captureEl
+        .querySelector<HTMLButtonElement>("#capture-submit")!
+        .addEventListener("click", () =>
+          submit(captureEl.querySelector<HTMLTextAreaElement>("#capture-input")!.value)
+        );
+    }
+  };
 
   // Le verrou d'écran n'appartient qu'à son bouton : ni « Passer », ni
   // « Réinit. », ni une pause ne le relâchent. Ils le faisaient, et le bouton
@@ -883,6 +952,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
   const endSignal = (index: number): SignalKind => {
     const next = steps[index + 1];
     if (!next) return "session";
+    if (next.capture) return "prompt";
     return next.chain ? "phase" : "step";
   };
 
@@ -891,7 +961,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     if (recapOpened) return;
     recapOpened = true;
     timer.pause();
-    renderRecapView(steps, ctx, timer.getRecord());
+    renderRecapView(steps, ctx, timer.getRecord(), values);
   };
 
   // Le navigateur throttle les timers d'un onglet caché et relâche le verrou
@@ -963,6 +1033,7 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
     toggleBtn.disabled = state.done;
     skipBtn.disabled = state.done;
     timerSection.classList.toggle("is-awaiting", state.awaitingReady);
+    renderCapture(state);
 
     // Sur petit écran on ne garde que le bloc courant et les suivants proches :
     // le reste du programme est masqué par CSS via ces classes.
@@ -1000,7 +1071,12 @@ function wireTimer(steps: RunnableStep[], ctx: SeanceContext) {
       if (prefs.screenOn) void wakeLock.acquire();
     }
   });
-  skipBtn.addEventListener("click", () => timer.skip());
+  skipBtn.addEventListener("click", () => {
+    // Passer une étape de collecte n'est pas une valeur à zéro : rien ne doit
+    // rester dans la map pour cet index.
+    values.delete(timer.getSnapshot().stepIndex);
+    timer.skip();
+  });
   resetBtn.addEventListener("click", () => {
     recapOpened = false;
     timer.reset();
@@ -1083,6 +1159,8 @@ interface RecapRow {
   step: RunnableStep;
   complete: boolean;
   dureeSecondes: number;
+  /** Relevée pendant la séance ; le récapitulatif l'affiche, il ne la saisit pas. */
+  value?: string;
 }
 
 interface RecapDraft {
@@ -1090,6 +1168,7 @@ interface RecapDraft {
   startedAt: string | null;
   complete: boolean[];
   dureeSecondes: number[];
+  values: (string | undefined)[];
   minutes: number;
   ressenti: string;
 }
@@ -1140,17 +1219,28 @@ function clearDraft(carnetContainerUrl: string): void {
  * sans l'app, puis loguée après coup), on part du programme prévu plutôt que
  * d'un relevé vide.
  */
-function toRecapRows(steps: RunnableStep[], record: SessionRecord): RecapRow[] {
+function toRecapRows(
+  steps: RunnableStep[],
+  record: SessionRecord,
+  values: Map<number, string>
+): RecapRow[] {
   const neverRan = record.startedAt === null;
   return steps.map((step, i) => ({
     step,
     complete: neverRan ? true : record.steps[i]?.completed ?? false,
     dureeSecondes: neverRan ? step.seconds : record.steps[i]?.elapsedSeconds ?? 0,
+    // Pas de valeur sur le chemin « jamais lancé » : personne n'a mesuré.
+    value: values.get(i),
   }));
 }
 
-function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: SessionRecord) {
-  const rows = toRecapRows(steps, record);
+function renderRecapView(
+  steps: RunnableStep[],
+  ctx: SeanceContext,
+  record: SessionRecord,
+  values: Map<number, string> = new Map()
+) {
+  const rows = toRecapRows(steps, record, values);
 
   // Une séance déjà saisie mais jamais écrite reprend la main sur le relevé.
   const draft = loadDraft(ctx.carnetContainerUrl);
@@ -1159,6 +1249,8 @@ function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: Sess
     rows.forEach((row, i) => {
       row.complete = draft!.complete[i];
       row.dureeSecondes = draft!.dureeSecondes[i];
+      // `values` absent sur un brouillon écrit avant cette version.
+      row.value = draft!.values?.[i];
     });
   }
 
@@ -1186,7 +1278,11 @@ function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: Sess
             <label class="recap-bloc">
               <input type="checkbox" name="bloc" value="${i}" ${r.complete ? "checked" : ""} />
               <span>${r.step.label}</span>
-              <span class="meta">${formatSeconds(r.dureeSecondes)}</span>
+              ${
+                r.value !== undefined
+                  ? `<span class="meta recap-value">${r.value}</span>`
+                  : `<span class="meta">${formatSeconds(r.dureeSecondes)}</span>`
+              }
             </label>`
             )
             .join("")}
@@ -1220,6 +1316,7 @@ function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: Sess
       startedAt: startedAt ? startedAt.toISOString() : null,
       complete,
       dureeSecondes: rows.map((r) => r.dureeSecondes),
+      values: rows.map((r) => r.value),
       minutes: m,
       ressenti,
     });
@@ -1270,6 +1367,7 @@ function renderRecapView(steps: RunnableStep[], ctx: SeanceContext, record: Sess
             title: r.step.label,
             completed: complete[i],
             durationSeconds: r.dureeSecondes,
+            value: r.value,
           })),
         });
       }

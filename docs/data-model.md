@@ -47,19 +47,40 @@ Une étape porte son type en `rdf:type`, et `act:order` pour le rang :
   asymétriques et évolutifs (1:1 → 2:2 → 2:5) sont des phases explicites, pas
   une notion de ratio dans le modèle.
 - `act:ChecklistStep` — aucune mesure.
+- `act:RecordStep` — le seul type qui **collecte** au lieu d'imposer : EVA
+  douleur, degrés de flexion, RPE, ressenti libre. `act:valueKind`
+  (`"scale"` | `"number"` | `"text"`), `act:prompt` (la question, si elle
+  diffère du titre), `act:minValue`/`act:maxValue` pour `"scale"`, `act:unit`
+  réutilisé tel quel pour `"number"`. `act:targetSeconds` optionnel en fait un
+  compte plafonné dans le temps : l'horloge borne l'effort, la valeur saisie
+  ensuite est le résultat — deux `act:StepRun` pour la même étape à
+  l'exécution (l'effort, puis la saisie), pas une troisième mécanique dans le
+  minuteur. Règle d'écriture : une `RecordStep` se place en début ou fin de
+  séance, jamais au milieu d'un effort — saisir oblige à regarder l'écran.
 - `act:RepeatStep` — imbrication : `act:times` + `act:hasStep`.
   `3× [10 squats, 10 fentes, 10 push-ups]` n'est pas `3×10 squats` ; la
   structure porte du sens pédagogique (rythme, mémorisation), et l'aplatir le
   perdrait.
 
 Un type inconnu à la lecture est traité comme une checklist plutôt qu'ignoré :
-mieux vaut afficher une étape qu'en perdre une du protocole.
+mieux vaut afficher une étape qu'en perdre une du protocole. Les `rdf:type`
+d'origine sont conservés sur cette checklist de repli, pour que la copie du
+protocole dans un carnet (`createLogbookFromProtocol`) ne les aplatisse pas
+en `act:ChecklistStep` — sinon la perte devient définitive dès la création du
+carnet, avant même que l'app apprenne le type.
 
 ### Ce qui est consigné
 
 `act:StepRun` — ce qu'une étape a donné : `act:ofStep` (→ l'étape du
 protocole), `act:title` **recopié** pour que le log reste lisible si le
-protocole change ensuite, `act:completed` (0/1), `act:durationSeconds`.
+protocole change ensuite, `act:completed` (0/1), `act:durationSeconds`,
+`act:value` (chaîne, seulement présent si une valeur a été saisie — une étape
+passée n'a ni `act:value` ni valeur vide).
+
+`act:ofStep` est ce qui rend un carnet exploitable sans rien ajouter au
+modèle : toutes les occurrences d'une même étape à travers les séances d'un
+carnet forment une série temporelle par mesure. C'est la lecture qui manquait
+pour suivre une progression ou décider d'un déblocage de stage.
 
 `act:durationSeconds` sur la `act:Session` est la **durée murale** depuis le
 premier démarrage, pauses et transitions comprises — pas la somme des étapes

@@ -1,7 +1,7 @@
 @prefix act:  <https://vocab.nicolasdb.eu/activity#> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 
-# Diagnostic app — collecte de valeurs.
+# Diagnostic record — collecte de valeurs.
 #
 # Compagnon de diagnostic-app.ttl, qui couvre les cinq types exécutables.
 # Celui-ci n'exerce qu'un seul type, act:RecordStep, dans ses quatre formes.
@@ -29,7 +29,7 @@
 # limite technique.
 
 <#it> a act:Protocol ;
-  act:title "Diagnostic app — collecte de valeurs" ;
+  act:title "Diagnostic record — collecte de valeurs" ;
   act:goal "Vérifier la saisie, la persistance et le signal des étapes de collecte" ;
   act:cadence "À chaque changement du modèle de collecte" ;
   act:hasStep <#echelle>, <#nombre>, <#plafonne>, <#texte>, <#passe> .
