@@ -10,9 +10,10 @@
 # Objectif : rendre audibles, en moins de trois minutes et sans regarder
 # l'écran, les quatre signaux (tick / phase / step / session), les deux
 # comportements de bouton (décompte vs validation) et le contraste
-# IntervalStep / RepeatStep.
+# IntervalStep / RepeatStep — y compris un RepeatStep chaîné (act:chain),
+# qui ne doit jamais se confondre avec les phases d'un IntervalStep.
 #
-# 27 secondes chronométrées. Le reste dépend de la vitesse des validations.
+# 35 secondes chronométrées. Le reste dépend de la vitesse des validations.
 #
 # Attendu, dans l'ordre :
 #   1. tick ×3, step
@@ -20,13 +21,16 @@
 #   3. step            (identique à 2 hors affichage du programme)
 #   4. phase, phase, phase, step   — et AUCUN tap entre les phases
 #   5. step ×3         (jamais phase : c'est le contraste qui prouve 4)
-#   6. session
+#   6. step            (entrée du groupe seulement) — puis AUCUN tap
+#                       jusqu'à la fin du groupe, frontière de tour comprise ;
+#                       jamais phase (c'est le contraste qui prouve 4 et 6)
+#   7. session
 
 <#it> a act:Protocol ;
   act:title "Diagnostic app — tous les types" ;
   act:goal "Vérifier l'exécution et les retours sonores/haptiques de chaque type d'étape" ;
   act:cadence "À chaque changement du code de signal" ;
-  act:hasStep <#chrono>, <#compte>, <#controle>, <#metronome>, <#circuit> .
+  act:hasStep <#chrono>, <#compte>, <#controle>, <#metronome>, <#circuit>, <#circuit-chaine> .
 
 # 1 — Le seul endroit où l'on entend « tick ». Attendu : 3, 2, 1 puis « step ».
 <#chrono> a act:TimedStep ;
@@ -85,5 +89,26 @@
 <#circuit-compte> a act:CountedStep ;
   act:order 2 ;
   act:title "Compte imbriqué" ;
+  act:targetCount 2 ;
+  act:unit "répétitions" .
+
+# 6 — Le même circuit, chaîné (act:chain). Attendu : un seul « step » à
+#     l'entrée du groupe, puis silence jusqu'à la fin, frontière de tour
+#     comprise — jamais de « phase », pour ne pas se confondre avec 4.
+<#circuit-chaine> a act:RepeatStep ;
+  act:order 6 ;
+  act:title "Circuit imbriqué chaîné" ;
+  act:times 2 ;
+  act:chain 1 ;
+  act:hasStep <#circuit-chaine-chrono>, <#circuit-chaine-compte> .
+
+<#circuit-chaine-chrono> a act:TimedStep ;
+  act:order 1 ;
+  act:title "Chrono imbriqué chaîné" ;
+  act:targetSeconds 4 .
+
+<#circuit-chaine-compte> a act:CountedStep ;
+  act:order 2 ;
+  act:title "Compte imbriqué chaîné" ;
   act:targetCount 2 ;
   act:unit "répétitions" .

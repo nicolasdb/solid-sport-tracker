@@ -56,6 +56,7 @@ export const act = {
   value: `${ACT}value`,
   rounds: `${ACT}rounds`,
   times: `${ACT}times`,
+  chain: `${ACT}chain`,
 
   protocol: `${ACT}protocol`,
   sourceProtocol: `${ACT}sourceProtocol`,
@@ -171,6 +172,13 @@ export interface RepeatStep {
   note?: string;
   times: number;
   steps: Step[];
+  /**
+   * Vrai : le groupe s'enchaîne seul, frontière de tour comprise — seule
+   * l'entrée dans le groupe attend le feu vert (même logique que les phases
+   * d'un `IntervalStep`, voir `RunnableStep.chain`). Absent/faux : chaque
+   * étape enfant attend une validation, comportement historique inchangé.
+   */
+  chain?: boolean;
 }
 
 export type Step =
@@ -349,11 +357,22 @@ export function flattenSteps(steps: Step[]): RunnableStep[] {
             });
           }
           break;
-        case "repeat":
+        case "repeat": {
+          const groupStart = out.length;
           for (let r = 1; r <= step.times; r += 1) {
             walk(step.steps, r);
           }
+          if (step.chain) {
+            // Seule la toute première étape du groupe attend le feu vert.
+            // Tout le reste s'enchaîne, frontière de tour comprise — même
+            // logique que les phases d'un IntervalStep (chain: !(r === 1 &&
+            // phaseIndex === 0)), mais ici sur l'ensemble aplati du groupe.
+            for (let i = groupStart + 1; i < out.length; i += 1) {
+              out[i].chain = true;
+            }
+          }
           break;
+        }
       }
     }
   };

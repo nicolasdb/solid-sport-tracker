@@ -1,0 +1,140 @@
+@prefix act:  <https://vocab.nicolasdb.eu/activity#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# Échauffement course à pied — v1.
+#
+# Marche vers un parc à 5 min, échauffement complet, course fractionnée
+# 1-1-1-1-1-1 (marche/course), retour au calme, deux collectes de ressenti.
+# Barefoot-style (chaussures minimalistes type Feiyue) : l'activation
+# musculaire cible spécifiquement la cheville, le mollet/tendon d'Achille
+# et le core, en plus du schéma de course (montées de genoux, talons-fesses).
+#
+# Première recette d'une famille progressive : seule l'étape #course évolue
+# d'une version à l'autre (rounds, durées de phase). Chaque stade est une
+# recette distincte, jamais une édition en place, pour que les carnets déjà
+# ouverts restent comparables à eux-mêmes.
+
+<#it> a act:Protocol ;
+  act:title "Échauffement course à pied — v1 (1-1-1-1-1-1)" ;
+  act:goal "Réveiller pieds, chevilles et hanches, préparer le schéma de course, courir en fractionné sans forcer" ;
+  act:cadence "Quotidien, alterné avec yoga/breathwork les jours de pluie" ;
+  act:hasStep <#motivation>, <#aller>, <#mobilite>, <#renfo>, <#course>, <#retour>, <#effort>, <#gene> .
+
+<#motivation> a act:RecordStep ;
+  act:order 1 ;
+  act:title "Motivation avant séance" ;
+  act:prompt "Comment tu te sens avant de sortir ?" ;
+  act:note "Choix : 😴 fatigué / 😐 mouais, ok / 💪 motivé" ;
+  act:valueKind "text" .
+
+<#aller> a act:TimedStep ;
+  act:order 2 ;
+  act:title "Marche rapide vers le parc" ;
+  act:note "Aller au parc à pas soutenu" ;
+  act:targetSeconds 300 .
+
+<#mobilite> a act:RepeatStep ;
+  act:order 3 ;
+  act:title "Mobilité articulaire" ;
+  act:times 1 ;
+  act:hasStep <#chevilles>, <#hanches>, <#buste>, <#fentes>, <#bassin> .
+
+<#chevilles> a act:CountedStep ;
+  act:order 1 ;
+  act:title "Cercles de chevilles" ;
+  act:targetCount 10 ;
+  act:unit "par sens, par pied" .
+
+<#hanches> a act:CountedStep ;
+  act:order 2 ;
+  act:title "Cercles de hanches" ;
+  act:targetCount 10 ;
+  act:unit "par sens" .
+
+<#buste> a act:CountedStep ;
+  act:order 3 ;
+  act:title "Rotations du buste" ;
+  act:targetCount 10 ;
+  act:unit "par sens" .
+
+<#fentes> a act:CountedStep ;
+  act:order 4 ;
+  act:title "Fentes marchées" ;
+  act:targetCount 5 ;
+  act:unit "par jambe" .
+
+<#bassin> a act:CountedStep ;
+  act:order 5 ;
+  act:title "Rotations du bassin" ;
+  act:targetCount 10 ;
+  act:unit "cercles larges" .
+
+<#renfo> a act:RepeatStep ;
+  act:order 4 ;
+  act:title "Activation musculaire" ;
+  act:times 3 ;
+  act:chain 1 ;
+  act:hasStep <#squats>, <#genoux>, <#talons>, <#pointes>, <#gainage> .
+
+<#squats> a act:CountedStep ;
+  act:order 1 ;
+  act:title "Squats pieds nus" ;
+  act:targetCount 10 ;
+  act:unit "répétitions" .
+
+<#genoux> a act:TimedStep ;
+  act:order 2 ;
+  act:title "Montées de genoux sur place" ;
+  act:targetSeconds 15 .
+
+<#talons> a act:TimedStep ;
+  act:order 3 ;
+  act:title "Talons-fesses sur place" ;
+  act:targetSeconds 15 .
+
+<#pointes> a act:CountedStep ;
+  act:order 4 ;
+  act:title "Montées sur pointes de pieds" ;
+  act:targetCount 10 ;
+  act:unit "répétitions" .
+
+<#gainage> a act:TimedStep ;
+  act:order 5 ;
+  act:title "Gainage" ;
+  act:targetSeconds 20 .
+
+<#course> a act:IntervalStep ;
+  act:order 5 ;
+  act:title "Course fractionnée 1-1-1-1-1-1" ;
+  act:note "Feiyue, allure marche soutenue / course facile" ;
+  act:rounds 6 ;
+  act:hasPhase <#course-marche>, <#course-run> .
+
+<#course-marche> a act:Phase ;
+  act:order 1 ;
+  act:title "marche" ;
+  act:targetSeconds 60 .
+
+<#course-run> a act:Phase ;
+  act:order 2 ;
+  act:title "course" ;
+  act:targetSeconds 60 .
+
+<#retour> a act:TimedStep ;
+  act:order 6 ;
+  act:title "Marche retour (retour au calme)" ;
+  act:targetSeconds 300 .
+
+<#effort> a act:RecordStep ;
+  act:order 7 ;
+  act:title "Effort ressenti" ;
+  act:prompt "Comment s'est passée la séance ?" ;
+  act:note "Choix : 😓 dur / 🙂 ok / 💪 facile" ;
+  act:valueKind "text" .
+
+<#gene> a act:RecordStep ;
+  act:order 8 ;
+  act:title "Gêne ou douleur" ;
+  act:prompt "Une gêne ou douleur à signaler ?" ;
+  act:note "Choix : 👍 rien à signaler / ⚠️ quelque chose à noter (préciser où si oui)" ;
+  act:valueKind "text" .

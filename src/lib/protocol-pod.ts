@@ -99,6 +99,7 @@ function readStep(dataset: SolidDataset, url: string): Step | null {
       kind: "repeat",
       ...common,
       times: getInteger(thing, act.times) ?? 1,
+      chain: (getInteger(thing, act.chain) ?? 0) !== 0,
       steps: readSteps(dataset, thing),
     };
   }
@@ -261,6 +262,7 @@ function buildProtocolDataset(docUrl: string, protocol: Protocol): SolidDataset 
         }
         case "repeat": {
           builder = builder.addUrl(RDF_TYPE, act.RepeatStep).setInteger(act.times, step.times);
+          if (step.chain) builder = builder.setInteger(act.chain, 1);
           // Écrit les enfants d'abord : ils doivent exister avant d'être liés.
           const childUrls = writeSteps(step.steps, `${prefix}${index}-`);
           childUrls.forEach((childUrl) => {

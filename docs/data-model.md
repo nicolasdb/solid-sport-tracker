@@ -60,7 +60,11 @@ Une étape porte son type en `rdf:type`, et `act:order` pour le rang :
 - `act:RepeatStep` — imbrication : `act:times` + `act:hasStep`.
   `3× [10 squats, 10 fentes, 10 push-ups]` n'est pas `3×10 squats` ; la
   structure porte du sens pédagogique (rythme, mémorisation), et l'aplatir le
-  perdrait.
+  perdrait. `act:chain` (0/1, optionnel) fait s'enchaîner le groupe seul,
+  frontière de tour comprise — seule l'entrée dans le groupe attend une
+  validation, comme les phases d'un `act:IntervalStep` (celui-ci s'enchaîne
+  toujours, sans drapeau ; `act:RepeatStep` s'enchaîne seulement si demandé).
+  Absent : comportement historique, une validation entre chaque étape.
 
 Un type inconnu à la lecture est traité comme une checklist plutôt qu'ignoré :
 mieux vaut afficher une étape qu'en perdre une du protocole. Les `rdf:type`
