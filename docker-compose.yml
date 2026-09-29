@@ -21,7 +21,7 @@ services:
       app.domain: "sportr.nicolasdb.eu"
 
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/index.html"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/index.html"]
       interval: 30s
       timeout: 5s
       retries: 3
